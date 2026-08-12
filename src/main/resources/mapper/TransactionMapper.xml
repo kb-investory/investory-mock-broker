@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.investory.mockbroker.mapper.TransactionMapper">
+
+  <sql id="txnColumns">
+    seq, profile_code, account_num, trans_no, trans_dtime, trans_type, trans_type_detail,
+    prod_code, prod_name, trans_num, trans_unit, base_amt, trans_amt,
+    settle_amt, balance_amt, currency_code, ex_code
+  </sql>
+
+  <insert id="insert" parameterType="MockTransaction" useGeneratedKeys="true" keyProperty="seq">
+    INSERT INTO mock_transaction
+      (profile_code, account_num, trans_no, trans_dtime, trans_type, trans_type_detail,
+       prod_code, prod_name, trans_num, trans_unit, base_amt, trans_amt,
+       settle_amt, balance_amt, currency_code, ex_code)
+    VALUES
+      (#{profileCode}, #{accountNum}, #{transNo}, #{transDtime}, #{transType}, #{transTypeDetail},
+       #{prodCode}, #{prodName}, #{transNum}, #{transUnit}, #{baseAmt}, #{transAmt},
+       #{settleAmt}, #{balanceAmt}, #{currencyCode}, #{exCode})
+  </insert>
+
+  <select id="findByPeriod" resultType="MockTransaction">
+    SELECT <include refid="txnColumns"/>
+      FROM mock_transaction
+     WHERE profile_code = #{profileCode} AND account_num = #{accountNum}
+       AND SUBSTRING(trans_dtime, 1, 8) BETWEEN #{fromDate} AND #{toDate}
+     ORDER BY trans_dtime DESC, seq DESC
+     LIMIT #{limit} OFFSET #{offset}
+  </select>
+
+  <select id="countByPeriod" resultType="int">
+    SELECT COUNT(*)
+      FROM mock_transaction
+     WHERE profile_code = #{profileCode} AND account_num = #{accountNum}
+       AND SUBSTRING(trans_dtime, 1, 8) BETWEEN #{fromDate} AND #{toDate}
+  </select>
+
+  <select id="findRecent" resultType="MockTransaction">
+    SELECT <include refid="txnColumns"/>
+      FROM mock_transaction
+     WHERE profile_code = #{profileCode} AND account_num = #{accountNum}
+     ORDER BY trans_dtime DESC, seq DESC
+     LIMIT #{limit}
+  </select>
+
+  <select id="countByAccountAndDate" resultType="int">
+    SELECT COUNT(*)
+      FROM mock_transaction
+     WHERE profile_code = #{profileCode} AND account_num = #{accountNum}
+       AND SUBSTRING(trans_dtime, 1, 8) = #{dateStr}
+  </select>
+
+  <delete id="deleteByProfileCode">
+    DELETE FROM mock_transaction WHERE profile_code = #{profileCode}
+  </delete>
+</mapper>

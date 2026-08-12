@@ -1,0 +1,39 @@
+# --- Gradle / 빌드 산출물 ---
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+out/
+
+# --- IDE ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- 로그 ---
+*.log
+logs/
+
+# --- 예전 H2 파일 모드 잔재 (MySQL 이관 후에는 안 쓰지만, 로컬에서 실수로 만들어질 수 있어 유지) ---
+data/
+*.mv.db
+*.trace.db
+
+# --- 민감정보: 절대 커밋하지 않는다 ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+credentials.json

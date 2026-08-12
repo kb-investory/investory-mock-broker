@@ -1,0 +1,30 @@
+{
+  "templateId": "GROWTH_FOCUS_01",
+  "profileName": "성장주 집중형",
+  "description": "반도체·플랫폼 성장주를 소수 종목에 나눠 담고 오래 들고 가는 유형. 매도가 거의 없고 하락 구간에서도 보유를 유지한다.",
+  "orgCode": "S9990001A",
+  "orgName": "미래에셋증권(모의)",
+
+  "prices": [
+    { "prodCode": "005930", "prodName": "삼성전자",       "marketType": "KOSPI", "currentPrice": 84200 },
+    { "prodCode": "000660", "prodName": "SK하이닉스",      "marketType": "KOSPI", "currentPrice": 191500 },
+    { "prodCode": "035420", "prodName": "NAVER",         "marketType": "KOSPI", "currentPrice": 218000 },
+    { "prodCode": "373220", "prodName": "LG에너지솔루션",  "marketType": "KOSPI", "currentPrice": 385000 },
+    { "prodCode": "042700", "prodName": "한미반도체",      "marketType": "KOSPI", "currentPrice": 96500 }
+  ],
+
+  "accounts": [
+    { "accountNum": "5011234567", "accountName": "종합위탁계좌", "accountType": "101", "issueDate": "20240103", "initialCash": 15000000 },
+    { "accountNum": "5017654321", "accountName": "ISA 계좌",     "accountType": "102", "issueDate": "20250211", "initialCash": 5000000 }
+  ],
+
+  "trades": [
+    { "accountNum": "5011234567", "tradedAt": "20260112101204", "side": "BUY", "prodCode": "005930", "quantity": 30, "price": 74800 },
+    { "accountNum": "5011234567", "tradedAt": "20260205133045", "side": "BUY", "prodCode": "000660", "quantity": 8,  "price": 168000 },
+    { "accountNum": "5017654321", "tradedAt": "20260220094512", "side": "BUY", "prodCode": "373220", "quantity": 2,  "price": 402000 },
+    { "accountNum": "5011234567", "tradedAt": "20260317112233", "side": "BUY", "prodCode": "005930", "quantity": 20, "price": 79200 },
+    { "accountNum": "5011234567", "tradedAt": "20260421145600", "side": "BUY", "prodCode": "035420", "quantity": 15, "price": 205000 },
+    { "accountNum": "5017654321", "tradedAt": "20260518103311", "side": "BUY", "prodCode": "042700", "quantity": 10, "price": 88000 },
+    { "accountNum": "5011234567", "tradedAt": "20260609140215", "side": "BUY", "prodCode": "000660", "quantity": 4,  "price": 183500 }
+  ]
+}

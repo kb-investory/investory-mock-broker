@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.investory.mockbroker.mapper.UserMapper">
+
+  <insert id="insert" parameterType="MockUser">
+    INSERT INTO mock_user (profile_code, login_id, login_password_hash, connection_id, org_code, org_name)
+    VALUES (#{profileCode}, #{loginId}, #{loginPasswordHash}, #{connectionId}, #{orgCode}, #{orgName})
+  </insert>
+
+  <select id="findByLoginId" resultType="MockUser">
+    SELECT profile_code, login_id, login_password_hash, connection_id, org_code, org_name, scenario_json
+      FROM mock_user WHERE login_id = #{loginId}
+  </select>
+
+  <select id="findByProfileCode" resultType="MockUser">
+    SELECT profile_code, login_id, login_password_hash, connection_id, org_code, org_name, scenario_json
+      FROM mock_user WHERE profile_code = #{profileCode}
+  </select>
+
+  <update id="applyScenario">
+    UPDATE mock_user SET org_code = #{orgCode}, org_name = #{orgName}, scenario_json = #{scenarioJson}
+     WHERE profile_code = #{profileCode}
+  </update>
+</mapper>

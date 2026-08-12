@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.investory.mockbroker.mapper.HoldingMapper">
+
+  <sql id="holdingColumns">
+    h.profile_code, h.account_num, h.prod_code, h.holding_num, h.avg_price,
+    p.prod_name, p.prod_type, p.ex_code, p.current_price
+  </sql>
+
+  <select id="findByAccountNum" resultType="MockHolding">
+    SELECT <include refid="holdingColumns"/>
+      FROM mock_holding h
+      JOIN mock_price p ON p.profile_code = h.profile_code AND p.prod_code = h.prod_code
+     WHERE h.profile_code = #{profileCode} AND h.account_num = #{accountNum}
+     ORDER BY h.prod_code ASC
+  </select>
+
+  <select id="findOne" resultType="MockHolding">
+    SELECT <include refid="holdingColumns"/>
+      FROM mock_holding h
+      JOIN mock_price p ON p.profile_code = h.profile_code AND p.prod_code = h.prod_code
+     WHERE h.profile_code = #{profileCode} AND h.account_num = #{accountNum} AND h.prod_code = #{prodCode}
+  </select>
+
+  <insert id="insert" parameterType="MockHolding">
+    INSERT INTO mock_holding (profile_code, account_num, prod_code, holding_num, avg_price)
+    VALUES (#{profileCode}, #{accountNum}, #{prodCode}, #{holdingNum}, #{avgPrice})
+  </insert>
+
+  <update id="update" parameterType="MockHolding">
+    UPDATE mock_holding
+       SET holding_num = #{holdingNum}, avg_price = #{avgPrice}
+     WHERE profile_code = #{profileCode} AND account_num = #{accountNum} AND prod_code = #{prodCode}
+  </update>
+
+  <delete id="delete">
+    DELETE FROM mock_holding
+     WHERE profile_code = #{profileCode} AND account_num = #{accountNum} AND prod_code = #{prodCode}
+  </delete>
+
+  <delete id="deleteByProfileCode">
+    DELETE FROM mock_holding WHERE profile_code = #{profileCode}
+  </delete>
+</mapper>

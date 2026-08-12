@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="
+         http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+         http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+         http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc.xsd">
+
+  <mvc:annotation-driven/>
+  <mvc:default-servlet-handler/>
+
+  <!-- 파일 위치를 지정하지 않는다 — 모든 값은 .env를 통해 주입되는 환경변수에서만 읽는다. -->
+  <context:property-placeholder/>
+
+  <context:component-scan base-package="com.investory.mockbroker.controller,com.investory.mockbroker.web"/>
+
+  <!-- 마이데이터 규격 API: 접근토큰 + 거래고유번호(x-api-tran-id) 검증 -->
+  <!-- /mock/** 데모 제어 API: 로그인해서 받은 접근토큰만 검증 (거래고유번호는 실제 규격에만 있는 헤더라 요구 안 함).
+       /mock/auth/login 자체는 로그인 전이라 토큰이 없으므로 검증 대상에서 제외한다. -->
+  <mvc:interceptors>
+    <mvc:interceptor>
+      <mvc:mapping path="/v2/invest/**"/>
+      <bean class="com.investory.mockbroker.web.MyDataHeaderInterceptor"/>
+    </mvc:interceptor>
+    <mvc:interceptor>
+      <mvc:mapping path="/mock/**"/>
+      <mvc:exclude-mapping path="/mock/auth/**"/>
+      <mvc:exclude-mapping path="/mock/system/**"/>
+      <mvc:exclude-mapping path="/mock/test/**"/>
+      <mvc:exclude-mapping path="/mock/admin/**"/>
+      <bean class="com.investory.mockbroker.web.MyDataHeaderInterceptor">
+        <property name="requireTranId" value="false"/>
+      </bean>
+    </mvc:interceptor>
+  </mvc:interceptors>
+
+  <!-- 콘솔 화면에서 다른 포트의 Investory 프론트가 직접 호출할 수 있게 허용 -->
+  <mvc:cors>
+    <mvc:mapping path="/**" allowed-origins="*" allowed-methods="GET,POST,PUT,DELETE,OPTIONS"
+                 allowed-headers="*"/>
+  </mvc:cors>
+</beans>

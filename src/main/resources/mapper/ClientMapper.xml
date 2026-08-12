@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.investory.mockbroker.mapper.ClientMapper">
+
+  <insert id="insert" parameterType="MockClient">
+    INSERT INTO mock_client (client_id, client_secret, client_name)
+    VALUES (#{clientId}, #{clientSecret}, #{clientName})
+  </insert>
+
+  <update id="update" parameterType="MockClient">
+    UPDATE mock_client
+       SET client_secret = #{clientSecret}, client_name = #{clientName}
+     WHERE client_id = #{clientId}
+  </update>
+
+  <select id="findByClientId" resultType="MockClient">
+    SELECT client_id, client_secret, client_name
+      FROM mock_client WHERE client_id = #{clientId}
+  </select>
+</mapper>

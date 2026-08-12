@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.investory.mockbroker.mapper.AccountMapper">
+
+  <insert id="insert" parameterType="MockAccount">
+    INSERT INTO mock_account (profile_code, org_code, account_num, account_name, account_type, issue_date, cash_balance)
+    VALUES (#{profileCode}, #{orgCode}, #{accountNum}, #{accountName}, #{accountType}, #{issueDate}, #{cashBalance})
+  </insert>
+
+  <select id="findByOrgCode" resultType="MockAccount">
+    SELECT profile_code, org_code, account_num, account_name, account_type, issue_date, cash_balance
+      FROM mock_account
+     WHERE profile_code = #{profileCode} AND org_code = #{orgCode}
+     ORDER BY account_type ASC, account_num ASC
+  </select>
+
+  <select id="findByAccountNum" resultType="MockAccount">
+    SELECT profile_code, org_code, account_num, account_name, account_type, issue_date, cash_balance
+      FROM mock_account
+     WHERE profile_code = #{profileCode} AND account_num = #{accountNum}
+  </select>
+
+  <update id="updateCashBalance">
+    UPDATE mock_account SET cash_balance = #{cashBalance}
+     WHERE profile_code = #{profileCode} AND account_num = #{accountNum}
+  </update>
+
+  <delete id="deleteByProfileCode">
+    DELETE FROM mock_account WHERE profile_code = #{profileCode}
+  </delete>
+</mapper>

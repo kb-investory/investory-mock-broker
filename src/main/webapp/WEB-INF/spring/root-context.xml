@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:mybatis="http://mybatis.org/schema/mybatis-spring"
+       xsi:schemaLocation="
+         http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+         http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+         http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+         http://mybatis.org/schema/mybatis-spring http://mybatis.org/schema/mybatis-spring.xsd">
+
+  <!-- 파일 위치를 지정하지 않는다 — 모든 값은 .env를 통해 주입되는 환경변수에서만 읽는다. -->
+  <context:property-placeholder/>
+
+  <!-- DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD는 어디에도 기본값을 두지 않는다 — 항상
+       .env를 통해 주입되는 환경변수로만 채워진다. 완전히 처음 상태로 되돌리려면 MySQL에서
+       이 스키마의 테이블을 직접 비우면 된다. -->
+  <bean id="dataSource" class="com.zaxxer.hikari.HikariDataSource" destroy-method="close">
+    <property name="driverClassName" value="com.mysql.cj.jdbc.Driver"/>
+    <property name="jdbcUrl"
+        value="jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME}?useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=Asia/Seoul&amp;characterEncoding=UTF-8"/>
+    <property name="username" value="${DB_USER}"/>
+    <property name="password" value="${DB_PASSWORD}"/>
+    <property name="maximumPoolSize" value="10"/>
+  </bean>
+
+  <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+    <property name="dataSource" ref="dataSource"/>
+    <property name="mapperLocations" value="classpath:mapper/*.xml"/>
+    <property name="typeAliasesPackage" value="com.investory.mockbroker.domain"/>
+    <property name="configuration">
+      <bean class="org.apache.ibatis.session.Configuration">
+        <property name="mapUnderscoreToCamelCase" value="true"/>
+      </bean>
+    </property>
+  </bean>
+
+  <mybatis:scan base-package="com.investory.mockbroker.mapper"/>
+
+  <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+    <property name="dataSource" ref="dataSource"/>
+  </bean>
+  <tx:annotation-driven transaction-manager="transactionManager"/>
+
+  <context:component-scan base-package="com.investory.mockbroker.service"/>
+</beans>

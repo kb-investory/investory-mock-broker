@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>관제 콘솔</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ground:#EEF0F3; --surface:#FFFFFF; --ink:#10141A; --muted:#6B7480;
+    --line:#D8DDE4; --buy:#C62F2A; --buy-soft:#FBECEB; --sell:#1B54A8;
+    --sans:"IBM Plex Sans KR",system-ui,sans-serif; --mono:"IBM Plex Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.6}
+  a,button,input,select,textarea{font-family:inherit}
+  :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  .bar{background:var(--surface);border-bottom:1px solid var(--line);padding:14px 20px;
+       display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .brand{font-weight:600;font-size:15px;letter-spacing:-.01em}
+  .brand span{color:var(--muted);font-weight:400;margin-left:8px;font-size:13px}
+  .bar-spacer{flex:1}
+  label{color:var(--muted);font-size:12px}
+  input[type=text],input[type=password],select{background:var(--surface);
+       border:1px solid var(--line);border-radius:3px;padding:7px 9px;font-size:13px;color:var(--ink)}
+  textarea{background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:9px;
+       font-size:12px;color:var(--ink);font-family:var(--mono);width:100%;resize:vertical}
+  button{border:1px solid var(--line);background:var(--surface);color:var(--ink);
+       border-radius:3px;padding:7px 13px;font-size:13px;cursor:pointer}
+  button:hover{border-color:#A9B2BD}
+  button.primary{background:var(--sell);border-color:var(--sell);color:#fff}
+  button.primary:hover{background:#164389}
+
+  .wrap{max-width:1000px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:4px}
+  .card > h2{margin:0;padding:12px 16px;border-bottom:1px solid var(--line);
+        font-size:13px;font-weight:600;letter-spacing:-.01em;display:flex;justify-content:space-between;align-items:center}
+  .card > h2 span{font-weight:400;color:var(--muted);font-size:12px}
+  .card-body{padding:16px;display:grid;gap:12px}
+  .row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+  .row .field{display:flex;flex-direction:column;gap:5px}
+  .row input,.row select{min-width:180px}
+  .hint{font-size:12px;color:var(--muted)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:400;font-size:12px;
+     padding:9px 16px;border-bottom:1px solid var(--line);background:#F7F8FA}
+  td{padding:10px 16px;border-bottom:1px solid #EDF0F3;font-family:var(--mono);font-size:12px}
+  td.name{font-family:var(--sans);font-size:13px}
+  tbody tr:last-child td{border-bottom:none}
+  .empty{padding:26px 16px;text-align:center;color:var(--muted);font-size:13px}
+
+  .login-wrap{max-width:340px;margin:80px auto}
+  .login-wrap .card-body{padding:20px}
+  .login-wrap label{display:block;margin-bottom:5px}
+  .login-wrap input{width:100%}
+  .login-wrap button{width:100%;padding:10px;font-weight:500}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+     background:var(--ink);color:#fff;padding:11px 18px;border-radius:4px;font-size:13px;
+     opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+  .toast.show{opacity:1}
+  .toast.err{background:var(--buy)}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">관제 콘솔 <span id="statusLabel">로그인 필요</span></div>
+  <div class="bar-spacer"></div>
+  <button id="logoutBtn" style="display:none">로그아웃</button>
+</header>
+
+<main>
+  <section class="wrap login-wrap" id="loginSection">
+    <div class="card">
+      <h2>관리자 로그인</h2>
+      <div class="card-body">
+        <div>
+          <label for="adminUserInput">아이디</label>
+          <input type="text" id="adminUserInput" autocomplete="username">
+        </div>
+        <div>
+          <label for="adminPwInput">비밀번호</label>
+          <input type="password" id="adminPwInput" autocomplete="current-password">
+        </div>
+        <button id="loginBtn">로그인</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="mainSection" style="display:none">
+
+    <div class="card">
+      <h2>시나리오 적용</h2>
+      <div class="card-body">
+        <p class="hint">
+          이미 존재하는 유저(예: <code>/mock/auth/register</code>로 미리 만들어둔 계정)에게
+          거래 패턴을 적용한다. 기존 계좌·시세·거래이력은 전부 지워지고 새로 만들어진다.
+        </p>
+        <div class="row">
+          <div class="field">
+            <label for="loginIdInput">loginId</label>
+            <input type="text" id="loginIdInput" placeholder="demo1">
+          </div>
+          <div class="field">
+            <label for="templateSelect">템플릿</label>
+            <select id="templateSelect">
+              <option value="">직접 JSON 입력</option>
+            </select>
+          </div>
+          <button id="applyBtn" class="primary">적용</button>
+        </div>
+        <div id="customJsonWrap" style="display:none">
+          <label for="customJsonInput">시나리오 JSON (orgCode/orgName/prices/accounts/trades)</label>
+          <textarea id="customJsonInput" rows="10" placeholder='{"orgCode":"S9990001A","orgName":"...", "prices":[...], "accounts":[...], "trades":[...]}'></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>전체 커넥션 목록 <span id="countLabel"></span></h2>
+      <div id="tableHolder"><div class="empty">불러오는 중...</div></div>
+    </div>
+
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let toastTimer;
+let templates = [];
+
+function toast(message, isError){
+  const el = $('toast');
+  el.textContent = message;
+  el.className = 'toast show' + (isError ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+function showLoggedIn(){
+  $('loginSection').style.display = 'none';
+  $('mainSection').style.display = '';
+  $('logoutBtn').style.display = '';
+  $('statusLabel').textContent = '관리자로 로그인됨';
+}
+function showLoggedOut(){
+  $('loginSection').style.display = '';
+  $('mainSection').style.display = 'none';
+  $('logoutBtn').style.display = 'none';
+  $('statusLabel').textContent = '로그인 필요';
+}
+
+function authHeaders(){
+  return { 'x-admin-token': sessionStorage.getItem('mb_admin_token') || '' };
+}
+
+function renderRows(rows){
+  if (!rows.length) {
+    $('tableHolder').innerHTML = '<div class="empty">아직 발급된 커넥션이 없습니다.</div>';
+    $('countLabel').textContent = '';
+    return;
+  }
+  const body = rows.map(r => `
+    <tr>
+      <td class="name">${r.loginId ?? '-'}</td>
+      <td class="name">${r.orgName ?? '-'}</td>
+      <td>${r.connectionId}</td>
+      <td>${r.clientId}</td>
+      <td>${r.createdAt ?? '-'}</td>
+    </tr>`).join('');
+  $('tableHolder').innerHTML = `
+    <table>
+      <thead><tr><th>loginId</th><th>증권사</th><th>connectionId</th><th>client_id</th><th>발급시각</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+  $('countLabel').textContent = `${rows.length}건`;
+}
+
+async function loadConnections(){
+  try {
+    const res = await fetch('/mock/admin/connections', { headers: authHeaders() });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '조회 실패');
+    renderRows(body);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function loadTemplates(){
+  try {
+    const res = await fetch('/mock/admin/templates', { headers: authHeaders() });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '조회 실패');
+    templates = body;
+    const opts = ['<option value="">직접 JSON 입력</option>']
+      .concat(templates.map(t => `<option value="${t.templateId}">${t.profileName} (${t.templateId})</option>`));
+    $('templateSelect').innerHTML = opts.join('');
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function bootstrapAfterLogin(){
+  showLoggedIn();
+  await Promise.all([loadConnections(), loadTemplates()]);
+}
+
+async function login(){
+  const username = $('adminUserInput').value.trim();
+  const password = $('adminPwInput').value;
+  if (!username || !password) {
+    toast('아이디/비밀번호를 입력하세요.', true);
+    return;
+  }
+  try {
+    const res = await fetch('/mock/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '로그인 실패');
+    sessionStorage.setItem('mb_admin_token', body.adminToken);
+    await bootstrapAfterLogin();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function applyScenario(){
+  const loginId = $('loginIdInput').value.trim();
+  const templateId = $('templateSelect').value;
+  if (!loginId) {
+    toast('loginId를 입력하세요.', true);
+    return;
+  }
+  const payload = { loginId };
+  if (templateId) {
+    payload.templateId = templateId;
+  } else {
+    const raw = $('customJsonInput').value.trim();
+    if (!raw) {
+      toast('템플릿을 고르거나 JSON을 직접 입력하세요.', true);
+      return;
+    }
+    try {
+      payload.scenario = JSON.parse(raw);
+    } catch (e) {
+      toast('JSON 형식이 올바르지 않습니다: ' + e.message, true);
+      return;
+    }
+  }
+  try {
+    const res = await fetch('/mock/admin/scenarios', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '적용 실패');
+    toast(`${loginId}에게 시나리오를 적용했습니다 (${body.orgName}).`);
+    await loadConnections();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+$('loginBtn').addEventListener('click', login);
+$('adminPwInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+$('logoutBtn').addEventListener('click', () => {
+  sessionStorage.removeItem('mb_admin_token');
+  showLoggedOut();
+});
+$('applyBtn').addEventListener('click', applyScenario);
+$('templateSelect').addEventListener('change', () => {
+  $('customJsonWrap').style.display = $('templateSelect').value ? 'none' : '';
+});
+
+if (sessionStorage.getItem('mb_admin_token')) {
+  bootstrapAfterLogin();
+} else {
+  showLoggedOut();
+}
+</script>
+</body>
+</html>

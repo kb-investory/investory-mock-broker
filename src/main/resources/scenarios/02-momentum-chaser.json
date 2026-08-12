@@ -1,0 +1,30 @@
+{
+  "templateId": "MOMENTUM_CHASER_01",
+  "profileName": "추격매수형",
+  "description": "이미 오른 종목을 뒤늦게 사고 며칠 만에 손실을 확정하는 패턴이 반복된다. 평균 보유기간이 짧고 실현손익이 대체로 마이너스다.",
+  "orgCode": "S9990002A",
+  "orgName": "키움증권(모의)",
+
+  "prices": [
+    { "prodCode": "247540", "prodName": "에코프로비엠", "marketType": "KOSDAQ", "currentPrice": 128000 },
+    { "prodCode": "086520", "prodName": "에코프로",     "marketType": "KOSDAQ", "currentPrice": 78900 },
+    { "prodCode": "196170", "prodName": "알테오젠",     "marketType": "KOSDAQ", "currentPrice": 342000 },
+    { "prodCode": "042700", "prodName": "한미반도체",   "marketType": "KOSPI",  "currentPrice": 96500 },
+    { "prodCode": "005930", "prodName": "삼성전자",     "marketType": "KOSPI",  "currentPrice": 84200 }
+  ],
+
+  "accounts": [
+    { "accountNum": "8022345678", "accountName": "종합위탁계좌", "accountType": "101", "issueDate": "20250408", "initialCash": 20000000 }
+  ],
+
+  "trades": [
+    { "accountNum": "8022345678", "tradedAt": "20260206093512", "side": "BUY",  "prodCode": "247540", "quantity": 20, "price": 142000 },
+    { "accountNum": "8022345678", "tradedAt": "20260213144820", "side": "SELL", "prodCode": "247540", "quantity": 20, "price": 131000 },
+    { "accountNum": "8022345678", "tradedAt": "20260302101533", "side": "BUY",  "prodCode": "196170", "quantity": 8,  "price": 375000 },
+    { "accountNum": "8022345678", "tradedAt": "20260311151102", "side": "SELL", "prodCode": "196170", "quantity": 8,  "price": 352000 },
+    { "accountNum": "8022345678", "tradedAt": "20260408092845", "side": "BUY",  "prodCode": "042700", "quantity": 30, "price": 104000 },
+    { "accountNum": "8022345678", "tradedAt": "20260415133950", "side": "SELL", "prodCode": "042700", "quantity": 30, "price": 97000 },
+    { "accountNum": "8022345678", "tradedAt": "20260602104417", "side": "BUY",  "prodCode": "086520", "quantity": 40, "price": 85200 },
+    { "accountNum": "8022345678", "tradedAt": "20260710112630", "side": "BUY",  "prodCode": "086520", "quantity": 20, "price": 80100 }
+  ]
+}

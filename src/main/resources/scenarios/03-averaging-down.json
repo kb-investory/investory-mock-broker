@@ -1,0 +1,26 @@
+{
+  "templateId": "AVERAGING_DOWN_01",
+  "profileName": "물타기 반복형",
+  "description": "손실이 난 종목을 계속 추가 매수해 평균단가를 낮추는 유형. 한 종목 비중이 과도하게 커지고 예수금이 빠르게 소진된다.",
+  "orgCode": "S9990001A",
+  "orgName": "미래에셋증권(모의)",
+
+  "prices": [
+    { "prodCode": "035720", "prodName": "카카오",     "marketType": "KOSPI", "currentPrice": 41200 },
+    { "prodCode": "051910", "prodName": "LG화학",     "marketType": "KOSPI", "currentPrice": 268000 },
+    { "prodCode": "006400", "prodName": "삼성SDI",    "marketType": "KOSPI", "currentPrice": 305000 },
+    { "prodCode": "005930", "prodName": "삼성전자",   "marketType": "KOSPI", "currentPrice": 84200 }
+  ],
+
+  "accounts": [
+    { "accountNum": "5013456789", "accountName": "종합위탁계좌", "accountType": "101", "issueDate": "20231120", "initialCash": 18000000 }
+  ],
+
+  "trades": [
+    { "accountNum": "5013456789", "tradedAt": "20260115103322", "side": "BUY", "prodCode": "035720", "quantity": 100, "price": 52000 },
+    { "accountNum": "5013456789", "tradedAt": "20260220141055", "side": "BUY", "prodCode": "035720", "quantity": 100, "price": 47500 },
+    { "accountNum": "5013456789", "tradedAt": "20260326094738", "side": "BUY", "prodCode": "035720", "quantity": 120, "price": 43800 },
+    { "accountNum": "5013456789", "tradedAt": "20260511132411", "side": "BUY", "prodCode": "035720", "quantity": 50,  "price": 40500 },
+    { "accountNum": "5013456789", "tradedAt": "20260622105920", "side": "BUY", "prodCode": "051910", "quantity": 2,   "price": 282000 }
+  ]
+}

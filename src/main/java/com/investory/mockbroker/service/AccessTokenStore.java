@@ -39,6 +39,14 @@ public class AccessTokenStore {
         return tokenToProfileCode.get(token);
     }
 
+    /** 유저 삭제 시, 그 유저 앞으로 발급된 토큰이 있으면 더 이상 유효하지 않도록 무효화한다. */
+    public synchronized void revoke(String profileCode) {
+        String token = profileCodeToToken.remove(profileCode);
+        if (token != null) {
+            tokenToProfileCode.remove(token);
+        }
+    }
+
     public void clear() {
         tokenToProfileCode.clear();
         profileCodeToToken.clear();

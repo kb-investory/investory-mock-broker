@@ -22,4 +22,13 @@
     UPDATE mock_user SET org_code = #{orgCode}, org_name = #{orgName}, scenario_json = #{scenarioJson}
      WHERE profile_code = #{profileCode}
   </update>
+
+  <select id="findAll" resultType="MockUser">
+    SELECT profile_code, login_id, login_password_hash, connection_id, org_code, org_name, scenario_json
+      FROM mock_user ORDER BY login_id
+  </select>
+
+  <delete id="delete">
+    DELETE FROM mock_user WHERE profile_code = #{profileCode}
+  </delete>
 </mapper>

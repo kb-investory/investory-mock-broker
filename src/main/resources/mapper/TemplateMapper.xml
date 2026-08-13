@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.investory.mockbroker.mapper.TemplateMapper">
+
+  <insert id="upsert" parameterType="MockScenarioTemplate">
+    INSERT INTO mock_scenario_template (template_id, profile_name, description, definition_json)
+    VALUES (#{templateId}, #{profileName}, #{description}, #{definitionJson})
+    ON DUPLICATE KEY UPDATE
+      profile_name = #{profileName},
+      description = #{description},
+      definition_json = #{definitionJson}
+  </insert>
+
+  <select id="findAll" resultType="MockScenarioTemplate">
+    SELECT template_id, profile_name, description, definition_json
+      FROM mock_scenario_template ORDER BY created_at
+  </select>
+
+  <select id="findById" resultType="MockScenarioTemplate">
+    SELECT template_id, profile_name, description, definition_json
+      FROM mock_scenario_template WHERE template_id = #{templateId}
+  </select>
+
+  <delete id="delete">
+    DELETE FROM mock_scenario_template WHERE template_id = #{templateId}
+  </delete>
+</mapper>

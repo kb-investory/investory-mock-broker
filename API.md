@@ -149,7 +149,8 @@ x-connection-id: {발급받은 connectionId}
 ## 관제 콘솔 API (`/mock/admin/**`)
 
 client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특정 유저·client에 스코프되지
-않고 **전체 커넥션 발급 현황을 보고, 유저에게 거래 패턴(시나리오)을 적용**하는 운영자용이다.
+않고 **전체 커넥션 발급 현황을 보고, 유저를 생성·삭제하고, 유저에게 거래 패턴(시나리오)을
+적용·관리**하는 운영자용이다.
 `/connections.html` 페이지가 이 API를 그대로 쓴다. 계정은 `.env`의
 `MOCKBROKER_ADMIN_USER`/`MOCKBROKER_ADMIN_PASSWORD`로 정한다 — 실제 보안장치가 아니라 아무나
 이 화면을 보지 못하게 막는 최소한의 문이다.
@@ -185,19 +186,60 @@ client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특
 ```
 토큰이 없거나 유효하지 않으면 `40101`.
 
-### `GET /mock/admin/templates` — 번들된 시나리오 템플릿 목록
+### `GET /mock/admin/templates` — 시나리오 템플릿 목록
 
-인증: `x-admin-token` 헤더. `resources/scenarios/*.json`에서 로드된 템플릿 전체를 돌려준다
-(로그인 자격증명은 포함하지 않는다).
+인증: `x-admin-token` 헤더. `resources/scenarios/*.json`에서 로드된 번들 템플릿과, 관제
+콘솔에서 저장한 DB 커스텀 템플릿(`mock_scenario_template`)을 합쳐서 돌려준다. `source`
+필드로 출처를 구분한다 (`FILE`은 삭제 불가, `DB`는 삭제 가능).
 
 **Response** `200`
 ```json
 [
-  { "templateId": "GROWTH_FOCUS_01", "profileName": "성장주 집중형", "description": "..." },
-  { "templateId": "MOMENTUM_CHASER_01", "profileName": "추격매수형", "description": "..." },
-  { "templateId": "AVERAGING_DOWN_01", "profileName": "물타기 반복형", "description": "..." }
+  { "templateId": "GROWTH_FOCUS_01", "profileName": "성장주 집중형", "description": "...", "source": "FILE" },
+  { "templateId": "MOMENTUM_CHASER_01", "profileName": "추격매수형", "description": "...", "source": "FILE" },
+  { "templateId": "AVERAGING_DOWN_01", "profileName": "물타기 반복형", "description": "...", "source": "FILE" },
+  { "templateId": "MY_CUSTOM_01", "profileName": "커스텀", "description": "...", "source": "DB" }
 ]
 ```
+
+### `POST /mock/admin/templates` — 커스텀 템플릿 저장
+
+인증: `x-admin-token` 헤더. 시나리오 JSON(`templateId`/`profileName`/`description`/`orgCode`/
+`orgName`/`prices`/`accounts`/`trades` — [시나리오 적용](#post-mockadminscenarios--유저에게-시나리오-적용)의
+`scenario` 필드와 동일한 형태)을 재사용 가능한 템플릿으로 DB에 저장한다(upsert — 같은
+`templateId`로 다시 저장하면 갱신). 번들 파일 템플릿과 같은 `templateId`는 거부된다.
+
+**Request**
+```json
+{
+  "templateId": "MY_CUSTOM_01",
+  "profileName": "커스텀",
+  "description": "직접 입력",
+  "orgCode": "S9990001A",
+  "orgName": "미래에셋증권(모의)",
+  "prices": [ { "prodCode": "005930", "prodName": "삼성전자", "marketType": "KOSPI", "currentPrice": 84200 } ],
+  "accounts": [ { "accountNum": "5011234567", "accountName": "종합위탁계좌", "accountType": "101", "issueDate": "20240103", "initialCash": 15000000 } ],
+  "trades": [ { "accountNum": "5011234567", "tradedAt": "20260112101204", "side": "BUY", "prodCode": "005930", "quantity": 30, "price": 74800 } ]
+}
+```
+
+**Response** `200`
+```json
+{ "templateId": "MY_CUSTOM_01", "profileName": "커스텀", "message": "템플릿을 저장했습니다." }
+```
+
+`templateId`가 없으면 `40001`, 번들 파일 템플릿과 겹치면 `40001`.
+
+### `DELETE /mock/admin/templates/{templateId}` — 커스텀 템플릿 삭제
+
+인증: `x-admin-token` 헤더. DB에 저장된 커스텀 템플릿만 삭제 가능하다.
+
+**Response** `200`
+```json
+{ "templateId": "MY_CUSTOM_01", "message": "템플릿을 삭제했습니다." }
+```
+
+번들 파일 템플릿 ID면 `40001`, 존재하지 않는 templateId면 `40401`.
 
 ### `POST /mock/admin/scenarios` — 유저에게 시나리오 적용
 
@@ -234,6 +276,54 @@ client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특
 
 등록되지 않은 `loginId`거나 존재하지 않는 `templateId`면 `40401`, `loginId`가 없거나
 `templateId`/`scenario`가 둘 다 없으면 `40001`.
+
+### `POST /mock/admin/users` — 유저 생성 (+ 즉시 템플릿 적용)
+
+인증: `x-admin-token` 헤더. 유저부터 만들고(기본 org/계좌), `templateId`나 `scenario`가 있으면
+이어서 바로 적용까지 한 번에 한다. `/mock/auth/register`와 달리 `systemKey`는 필요 없다
+(이미 admin 토큰으로 인증됨).
+
+**Request (빈 계정만 생성)**
+```json
+{ "loginId": "demo2", "loginPassword": "1234" }
+```
+
+**Request (생성과 동시에 템플릿 적용)**
+```json
+{ "loginId": "demo2", "loginPassword": "1234", "templateId": "GROWTH_FOCUS_01" }
+```
+
+**Response** `200`
+```json
+{ "loginId": "demo2", "orgCode": "S9990001A", "orgName": "미래에셋증권(모의)" }
+```
+
+`loginId`/`loginPassword`가 없으면 `40001`, 이미 사용 중인 `loginId`면 `40001`.
+
+### `GET /mock/admin/users` — 전체 유저 목록
+
+인증: `x-admin-token` 헤더.
+
+**Response** `200`
+```json
+[
+  { "loginId": "demo1", "orgName": "미래에셋증권(모의)", "scenarioApplied": true },
+  { "loginId": "demo2", "orgName": "테스트증권(모의)", "scenarioApplied": false }
+]
+```
+
+### `DELETE /mock/admin/users/{loginId}` — 유저 삭제
+
+인증: `x-admin-token` 헤더. 유저와 그 유저의 계좌·보유종목·거래내역·시세·커넥션을 전부
+연쇄 삭제한다. 살아있는 `accessToken`이 있으면 같이 무효화된다(이후 그 토큰으로 오는 요청은
+`40101`).
+
+**Response** `200`
+```json
+{ "loginId": "demo2", "message": "유저를 삭제했습니다." }
+```
+
+등록되지 않은 `loginId`면 `40401`.
 
 ---
 

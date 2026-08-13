@@ -33,6 +33,9 @@
   button:hover{border-color:#A9B2BD}
   button.primary{background:var(--sell);border-color:var(--sell);color:#fff}
   button.primary:hover{background:#164389}
+  button.danger{color:var(--buy);border-color:var(--buy)}
+  button.danger:hover{background:var(--buy-soft)}
+  button.small{padding:4px 9px;font-size:12px}
 
   .wrap{max-width:1000px;margin:0 auto;padding:20px;display:grid;gap:16px}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:4px}
@@ -44,14 +47,20 @@
   .row .field{display:flex;flex-direction:column;gap:5px}
   .row input,.row select{min-width:180px}
   .hint{font-size:12px;color:var(--muted)}
+  .checkline{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+  .checkline input{margin:0}
 
   table{width:100%;border-collapse:collapse;font-size:13px}
   th{text-align:left;color:var(--muted);font-weight:400;font-size:12px;
      padding:9px 16px;border-bottom:1px solid var(--line);background:#F7F8FA}
   td{padding:10px 16px;border-bottom:1px solid #EDF0F3;font-family:var(--mono);font-size:12px}
   td.name{font-family:var(--sans);font-size:13px}
+  td.actions{display:flex;gap:6px;align-items:center;font-family:var(--sans)}
   tbody tr:last-child td{border-bottom:none}
   .empty{padding:26px 16px;text-align:center;color:var(--muted);font-size:13px}
+  .badge{display:inline-block;font-size:11px;padding:2px 6px;border-radius:3px;
+       background:#F0F2F5;color:var(--muted);font-family:var(--sans)}
+  .badge.db{background:#E7EFFB;color:var(--sell)}
 
   .login-wrap{max-width:340px;margin:80px auto}
   .login-wrap .card-body{padding:20px}
@@ -95,11 +104,38 @@
   <section class="wrap" id="mainSection" style="display:none">
 
     <div class="card">
+      <h2>유저 생성</h2>
+      <div class="card-body">
+        <p class="hint">
+          새 데모 유저를 만든다. 템플릿을 고르면 유저 생성과 동시에 그 거래 패턴까지 바로 적용된다
+          (건너뛰면 빈 계정만 만들어지고, 아래 "시나리오 적용"에서 나중에 붙일 수 있다).
+        </p>
+        <div class="row">
+          <div class="field">
+            <label for="newLoginIdInput">loginId</label>
+            <input type="text" id="newLoginIdInput" placeholder="demo2">
+          </div>
+          <div class="field">
+            <label for="newPasswordInput">password</label>
+            <input type="password" id="newPasswordInput" placeholder="1234">
+          </div>
+          <div class="field">
+            <label for="newUserTemplateSelect">템플릿 (선택)</label>
+            <select id="newUserTemplateSelect">
+              <option value="">빈 계정으로 생성</option>
+            </select>
+          </div>
+          <button id="createUserBtn" class="primary">생성</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>시나리오 적용</h2>
       <div class="card-body">
         <p class="hint">
-          이미 존재하는 유저(예: <code>/mock/auth/register</code>로 미리 만들어둔 계정)에게
-          거래 패턴을 적용한다. 기존 계좌·시세·거래이력은 전부 지워지고 새로 만들어진다.
+          이미 존재하는 유저(예: <code>/mock/auth/register</code>나 위 "유저 생성"으로 만들어둔
+          계정)에게 거래 패턴을 적용한다. 기존 계좌·시세·거래이력은 전부 지워지고 새로 만들어진다.
         </p>
         <div class="row">
           <div class="field">
@@ -115,10 +151,24 @@
           <button id="applyBtn" class="primary">적용</button>
         </div>
         <div id="customJsonWrap" style="display:none">
-          <label for="customJsonInput">시나리오 JSON (orgCode/orgName/prices/accounts/trades)</label>
-          <textarea id="customJsonInput" rows="10" placeholder='{"orgCode":"S9990001A","orgName":"...", "prices":[...], "accounts":[...], "trades":[...]}'></textarea>
+          <label for="customJsonInput">시나리오 JSON (templateId/profileName/description/orgCode/orgName/prices/accounts/trades)</label>
+          <textarea id="customJsonInput" rows="10" placeholder='{"templateId":"MY_SCENARIO_01","profileName":"...","orgCode":"S9990001A","orgName":"...", "prices":[...], "accounts":[...], "trades":[...]}'></textarea>
+          <label class="checkline">
+            <input type="checkbox" id="saveAsTemplateCheck">
+            이 JSON을 재사용 가능한 템플릿으로 같이 저장 (templateId 필요)
+          </label>
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>저장된 템플릿 <span id="templateCountLabel"></span></h2>
+      <div id="templateListHolder"><div class="empty">불러오는 중...</div></div>
+    </div>
+
+    <div class="card">
+      <h2>유저 관리 <span id="userCountLabel"></span></h2>
+      <div id="userTableHolder"><div class="empty">불러오는 중...</div></div>
     </div>
 
     <div class="card">
@@ -194,15 +244,185 @@ async function loadConnections(){
   }
 }
 
+function templateOptions(includeCustomJsonOption, selectedTemplateId){
+  const firstLabel = includeCustomJsonOption ? '직접 JSON 입력' : '빈 계정으로 생성';
+  const opts = [`<option value=""${!selectedTemplateId ? ' selected' : ''}>${firstLabel}</option>`];
+  return opts.concat(templates.map(t =>
+    `<option value="${t.templateId}"${t.templateId === selectedTemplateId ? ' selected' : ''}>${t.profileName} (${t.templateId})${t.source === 'DB' ? ' · 커스텀' : ''}</option>`
+  )).join('');
+}
+
+function renderTemplateList(){
+  if (!templates.length) {
+    $('templateListHolder').innerHTML = '<div class="empty">아직 저장된 템플릿이 없습니다.</div>';
+    $('templateCountLabel').textContent = '';
+    return;
+  }
+  const body = templates.map(t => `
+    <tr>
+      <td class="name">${t.profileName}</td>
+      <td>${t.templateId}</td>
+      <td class="name">${t.description ?? '-'}</td>
+      <td><span class="badge ${t.source === 'DB' ? 'db' : ''}">${t.source === 'DB' ? '커스텀' : '번들'}</span></td>
+      <td class="actions">
+        ${t.source === 'DB' ? `<button class="small danger" data-delete-template="${t.templateId}">삭제</button>` : ''}
+      </td>
+    </tr>`).join('');
+  $('templateListHolder').innerHTML = `
+    <table>
+      <thead><tr><th>이름</th><th>templateId</th><th>설명</th><th>출처</th><th></th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+  $('templateCountLabel').textContent = `${templates.length}건`;
+
+  $('templateListHolder').querySelectorAll('[data-delete-template]').forEach(btn => {
+    btn.addEventListener('click', () => deleteTemplate(btn.dataset.deleteTemplate));
+  });
+}
+
+function syncCustomJsonVisibility(){
+  $('customJsonWrap').style.display = $('templateSelect').value ? 'none' : '';
+}
+
 async function loadTemplates(){
   try {
     const res = await fetch('/mock/admin/templates', { headers: authHeaders() });
     const body = await res.json();
     if (!res.ok) throw new Error(body.rsp_msg || '조회 실패');
     templates = body;
-    const opts = ['<option value="">직접 JSON 입력</option>']
-      .concat(templates.map(t => `<option value="${t.templateId}">${t.profileName} (${t.templateId})</option>`));
-    $('templateSelect').innerHTML = opts.join('');
+    $('templateSelect').innerHTML = templateOptions(true);
+    $('newUserTemplateSelect').innerHTML = templateOptions(false);
+    renderTemplateList();
+    syncCustomJsonVisibility();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function deleteTemplate(templateId){
+  if (!confirm(`템플릿 "${templateId}"을(를) 삭제할까요?`)) return;
+  try {
+    const res = await fetch(`/mock/admin/templates/${encodeURIComponent(templateId)}`, {
+      method: 'DELETE', headers: authHeaders()
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '삭제 실패');
+    toast(`템플릿 "${templateId}"을(를) 삭제했습니다.`);
+    await loadTemplates();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function renderUserRows(rows){
+  if (!rows.length) {
+    $('userTableHolder').innerHTML = '<div class="empty">아직 생성된 유저가 없습니다.</div>';
+    $('userCountLabel').textContent = '';
+    return;
+  }
+  const body = rows.map(r => {
+    const matched = templates.find(t => t.templateId === r.appliedTemplateId);
+    const scenarioLabel = !r.scenarioApplied ? '-' : (matched ? matched.profileName : '적용됨(커스텀 JSON)');
+    return `
+    <tr data-login-id="${r.loginId}">
+      <td class="name">${r.loginId}</td>
+      <td class="name">${r.orgName ?? '-'}</td>
+      <td>${scenarioLabel}</td>
+      <td class="actions">
+        <select class="reapply-select" style="min-width:140px">${templateOptions(false, r.appliedTemplateId)}</select>
+        <button class="small" data-reapply="${r.loginId}">재적용</button>
+        <button class="small danger" data-delete-user="${r.loginId}">삭제</button>
+      </td>
+    </tr>`;
+  }).join('');
+  $('userTableHolder').innerHTML = `
+    <table>
+      <thead><tr><th>loginId</th><th>증권사</th><th>시나리오</th><th></th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+  $('userCountLabel').textContent = `${rows.length}건`;
+
+  $('userTableHolder').querySelectorAll('[data-reapply]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('tr');
+      const templateId = row.querySelector('.reapply-select').value;
+      reapplyUser(btn.dataset.reapply, templateId);
+    });
+  });
+  $('userTableHolder').querySelectorAll('[data-delete-user]').forEach(btn => {
+    btn.addEventListener('click', () => deleteUser(btn.dataset.deleteUser));
+  });
+}
+
+async function loadUsers(){
+  try {
+    const res = await fetch('/mock/admin/users', { headers: authHeaders() });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '조회 실패');
+    renderUserRows(body);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function reapplyUser(loginId, templateId){
+  if (!templateId) {
+    toast('재적용할 템플릿을 고르세요.', true);
+    return;
+  }
+  try {
+    const res = await fetch('/mock/admin/scenarios', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ loginId, templateId })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '재적용 실패');
+    toast(`${loginId}에게 템플릿을 재적용했습니다.`);
+    await Promise.all([loadUsers(), loadConnections()]);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function deleteUser(loginId){
+  if (!confirm(`유저 "${loginId}"과(와) 딸린 계좌·거래내역을 전부 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  try {
+    const res = await fetch(`/mock/admin/users/${encodeURIComponent(loginId)}`, {
+      method: 'DELETE', headers: authHeaders()
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '삭제 실패');
+    toast(`유저 "${loginId}"을(를) 삭제했습니다.`);
+    await Promise.all([loadUsers(), loadConnections()]);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function createUser(){
+  const loginId = $('newLoginIdInput').value.trim();
+  const password = $('newPasswordInput').value;
+  const templateId = $('newUserTemplateSelect').value;
+  if (!loginId || !password) {
+    toast('loginId/password를 입력하세요.', true);
+    return;
+  }
+  const payload = { loginId, loginPassword: password };
+  if (templateId) payload.templateId = templateId;
+  try {
+    const res = await fetch('/mock/admin/users', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '생성 실패');
+    toast(`유저 "${loginId}"을(를) 생성했습니다 (${body.orgName}).`);
+    $('newLoginIdInput').value = '';
+    $('newPasswordInput').value = '';
+    $('newUserTemplateSelect').value = '';
+    await Promise.all([loadUsers(), loadConnections()]);
   } catch (e) {
     toast(e.message, true);
   }
@@ -210,7 +430,8 @@ async function loadTemplates(){
 
 async function bootstrapAfterLogin(){
   showLoggedIn();
-  await Promise.all([loadConnections(), loadTemplates()]);
+  await loadTemplates();
+  await Promise.all([loadConnections(), loadUsers()]);
 }
 
 async function login(){
@@ -243,6 +464,7 @@ async function applyScenario(){
     return;
   }
   const payload = { loginId };
+  let customScenario = null;
   if (templateId) {
     payload.templateId = templateId;
   } else {
@@ -252,11 +474,12 @@ async function applyScenario(){
       return;
     }
     try {
-      payload.scenario = JSON.parse(raw);
+      customScenario = JSON.parse(raw);
     } catch (e) {
       toast('JSON 형식이 올바르지 않습니다: ' + e.message, true);
       return;
     }
+    payload.scenario = customScenario;
   }
   try {
     const res = await fetch('/mock/admin/scenarios', {
@@ -267,7 +490,31 @@ async function applyScenario(){
     const body = await res.json();
     if (!res.ok) throw new Error(body.rsp_msg || '적용 실패');
     toast(`${loginId}에게 시나리오를 적용했습니다 (${body.orgName}).`);
-    await loadConnections();
+
+    if (customScenario && $('saveAsTemplateCheck').checked) {
+      await saveCustomAsTemplate(customScenario);
+    }
+    await Promise.all([loadConnections(), loadUsers()]);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function saveCustomAsTemplate(scenario){
+  if (!scenario.templateId) {
+    toast('템플릿으로 저장하려면 JSON에 templateId가 있어야 합니다.', true);
+    return;
+  }
+  try {
+    const res = await fetch('/mock/admin/templates', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify(scenario)
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '템플릿 저장 실패');
+    toast(`템플릿 "${scenario.templateId}"으로 저장했습니다.`);
+    await loadTemplates();
   } catch (e) {
     toast(e.message, true);
   }
@@ -280,9 +527,8 @@ $('logoutBtn').addEventListener('click', () => {
   showLoggedOut();
 });
 $('applyBtn').addEventListener('click', applyScenario);
-$('templateSelect').addEventListener('change', () => {
-  $('customJsonWrap').style.display = $('templateSelect').value ? 'none' : '';
-});
+$('createUserBtn').addEventListener('click', createUser);
+$('templateSelect').addEventListener('change', syncCustomJsonVisibility);
 
 if (sessionStorage.getItem('mb_admin_token')) {
   bootstrapAfterLogin();

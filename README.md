@@ -98,6 +98,17 @@ Settings → Secrets에 `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY`/`DEPLOY_PAT
    번들된 템플릿(성장주 집중형/추격매수형/물타기 반복형 등) 중 하나를 적용하거나, JSON을 직접
    입력합니다. 기존 계좌·시세·거래이력은 지워지고 그 정의로 새로 만들어집니다.
 
+관제 콘솔에 로그인한 **관리자**라면 이 두 단계를 굳이 나눠서 할 필요 없이, 콘솔의 "유저 생성"
+카드(또는 `POST /mock/admin/users`)에서 `loginId`/`password`와 템플릿을 한 번에 넣어 유저 생성과
+시나리오 적용을 한 번에 끝낼 수 있습니다 — `systemKey`도 필요 없습니다(이미 관리자 인증이라).
+더 이상 필요 없는 테스트 유저는 콘솔의 "유저 관리" 카드(또는 `DELETE /mock/admin/users/{loginId}`)
+에서 삭제할 수 있으며, 그 유저의 계좌·거래내역·커넥션·접근토큰까지 전부 같이 정리됩니다.
+
+직접 입력한 시나리오 JSON을 다음에도 재사용하고 싶다면, 관제 콘솔에서 "템플릿으로 저장"을
+체크하거나 `POST /mock/admin/templates`를 호출해 DB에 커스텀 템플릿으로 저장해둘 수 있습니다
+(파일로 번들된 기본 템플릿과 별개로 관리되며, `DELETE /mock/admin/templates/{templateId}`로
+지울 수 있습니다 — 번들 템플릿 자체는 삭제할 수 없습니다).
+
 `resources/scenarios/*.json`은 이제 "거래 패턴 템플릿"일 뿐이라 로그인 자격증명이 없고,
 안전하게 git에 커밋됩니다.
 

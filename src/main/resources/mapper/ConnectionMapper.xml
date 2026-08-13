@@ -24,4 +24,8 @@
       FROM mock_connection
      ORDER BY created_at DESC
   </select>
+
+  <delete id="deleteByProfileCode">
+    DELETE FROM mock_connection WHERE profile_code = #{profileCode}
+  </delete>
 </mapper>

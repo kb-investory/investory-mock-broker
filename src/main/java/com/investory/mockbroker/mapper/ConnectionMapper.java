@@ -11,4 +11,5 @@ public interface ConnectionMapper {
     MockConnection findByClientIdAndProfileCode(@Param("clientId") String clientId,
                                                  @Param("profileCode") String profileCode);
     List<MockConnection> findAll();
+    void deleteByProfileCode(@Param("profileCode") String profileCode);
 }

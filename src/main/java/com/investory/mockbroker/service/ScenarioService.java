@@ -5,9 +5,11 @@ import com.investory.mockbroker.domain.MockAccount;
 import com.investory.mockbroker.domain.MockPrice;
 import com.investory.mockbroker.domain.MockUser;
 import com.investory.mockbroker.dto.MockApiException;
+import com.investory.mockbroker.domain.MockScenarioTemplate;
 import com.investory.mockbroker.mapper.AccountMapper;
 import com.investory.mockbroker.mapper.HoldingMapper;
 import com.investory.mockbroker.mapper.PriceMapper;
+import com.investory.mockbroker.mapper.TemplateMapper;
 import com.investory.mockbroker.mapper.TransactionMapper;
 import com.investory.mockbroker.mapper.UserMapper;
 import com.investory.mockbroker.seed.ScenarioDefinition;
@@ -66,6 +68,7 @@ public class ScenarioService {
     private final PriceMapper priceMapper;
     private final HoldingMapper holdingMapper;
     private final TransactionMapper transactionMapper;
+    private final TemplateMapper templateMapper;
     private final OrderService orderService;
     private final MarketQuoteService marketQuoteService;
     private final ClientService clientService;
@@ -77,14 +80,16 @@ public class ScenarioService {
     @Autowired
     public ScenarioService(DataSource dataSource, UserMapper userMapper, AccountMapper accountMapper,
                            PriceMapper priceMapper, HoldingMapper holdingMapper,
-                           TransactionMapper transactionMapper, OrderService orderService,
-                           MarketQuoteService marketQuoteService, ClientService clientService) {
+                           TransactionMapper transactionMapper, TemplateMapper templateMapper,
+                           OrderService orderService, MarketQuoteService marketQuoteService,
+                           ClientService clientService) {
         this.dataSource = dataSource;
         this.userMapper = userMapper;
         this.accountMapper = accountMapper;
         this.priceMapper = priceMapper;
         this.holdingMapper = holdingMapper;
         this.transactionMapper = transactionMapper;
+        this.templateMapper = templateMapper;
         this.orderService = orderService;
         this.marketQuoteService = marketQuoteService;
         this.clientService = clientService;
@@ -137,12 +142,112 @@ public class ScenarioService {
         return new ArrayList<>(scenarios.values());
     }
 
+    /** 번들 파일 템플릿을 먼저 찾고, 없으면 관제 콘솔에서 저장한 DB 커스텀 템플릿을 찾는다. */
     public ScenarioDefinition getTemplate(String templateId) {
-        ScenarioDefinition def = scenarios.get(templateId);
-        if (def == null) {
+        ScenarioDefinition fileDef = scenarios.get(templateId);
+        if (fileDef != null) {
+            return fileDef;
+        }
+        MockScenarioTemplate dbTemplate = templateMapper.findById(templateId);
+        if (dbTemplate == null) {
             throw MockApiException.notFound("등록되지 않은 템플릿입니다: " + templateId);
         }
-        return def;
+        return parseDefinition(dbTemplate.getDefinitionJson());
+    }
+
+    /** 관제 콘솔의 템플릿 선택창용 — 번들 파일 템플릿 + DB 커스텀 템플릿을 합쳐 돌려준다. */
+    public List<TemplateSummary> listAllTemplates() {
+        List<TemplateSummary> result = new ArrayList<>();
+        for (ScenarioDefinition def : scenarios.values()) {
+            result.add(new TemplateSummary(def.getTemplateId(), def.getProfileName(), def.getDescription(), "FILE"));
+        }
+        for (MockScenarioTemplate t : templateMapper.findAll()) {
+            result.add(new TemplateSummary(t.getTemplateId(), t.getProfileName(), t.getDescription(), "DB"));
+        }
+        return result;
+    }
+
+    /**
+     * 관제 콘솔에서 직접 입력한(또는 적용한) 시나리오 JSON을 재사용 가능한 커스텀 템플릿으로
+     * DB에 저장한다. templateId가 번들 파일 템플릿과 겹치면 거부한다 — 기본 제공 템플릿을
+     * 실수로 덮어쓰는 걸 막기 위함이다.
+     */
+    public synchronized void saveCustomTemplate(ScenarioDefinition def) {
+        if (def.getTemplateId() == null || def.getTemplateId().isEmpty()) {
+            throw MockApiException.badRequest("templateId는 필수입니다.");
+        }
+        if (scenarios.containsKey(def.getTemplateId())) {
+            throw MockApiException.badRequest("번들 템플릿과 같은 templateId는 쓸 수 없습니다: " + def.getTemplateId());
+        }
+        MockScenarioTemplate row = new MockScenarioTemplate();
+        row.setTemplateId(def.getTemplateId());
+        row.setProfileName(def.getProfileName());
+        row.setDescription(def.getDescription());
+        row.setDefinitionJson(writeDefinition(def));
+        templateMapper.upsert(row);
+    }
+
+    /** DB 커스텀 템플릿만 삭제 가능하다 — 번들 파일 템플릿 ID면 거부한다. */
+    public synchronized void deleteCustomTemplate(String templateId) {
+        if (scenarios.containsKey(templateId)) {
+            throw MockApiException.badRequest("번들 템플릿은 삭제할 수 없습니다: " + templateId);
+        }
+        int affected = templateMapper.delete(templateId);
+        if (affected == 0) {
+            throw MockApiException.notFound("등록되지 않은 템플릿입니다: " + templateId);
+        }
+    }
+
+    private ScenarioDefinition parseDefinition(String json) {
+        try {
+            return objectMapper.readValue(json, ScenarioDefinition.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("저장된 템플릿을 읽지 못했습니다.", e);
+        }
+    }
+
+    /**
+     * 유저에게 마지막으로 적용된 시나리오의 templateId만 뽑아낸다 (관제 콘솔의 유저 관리 테이블에서
+     * 재적용 select를 그 값으로 미리 선택해두는 용도). 아직 아무 시나리오도 적용 안 됐거나,
+     * 직접 입력한 JSON에 templateId가 없었으면 null.
+     */
+    public String appliedTemplateIdOf(MockUser user) {
+        if (user.getScenarioJson() == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(user.getScenarioJson(), ScenarioDefinition.class).getTemplateId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String writeDefinition(ScenarioDefinition def) {
+        try {
+            return objectMapper.writeValueAsString(def);
+        } catch (Exception e) {
+            throw new IllegalStateException("템플릿을 직렬화하지 못했습니다.", e);
+        }
+    }
+
+    /** 관제 콘솔 템플릿 선택창 응답용 — 파일/DB 어느 쪽 출처인지(source)를 같이 내려준다. */
+    public static class TemplateSummary {
+        private final String templateId;
+        private final String profileName;
+        private final String description;
+        private final String source;
+
+        public TemplateSummary(String templateId, String profileName, String description, String source) {
+            this.templateId = templateId;
+            this.profileName = profileName;
+            this.description = description;
+            this.source = source;
+        }
+
+        public String getTemplateId() { return templateId; }
+        public String getProfileName() { return profileName; }
+        public String getDescription() { return description; }
+        public String getSource() { return source; }
     }
 
     /**

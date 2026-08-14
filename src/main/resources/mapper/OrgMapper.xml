@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.investory.mockbroker.mapper.OrgMapper">
+
+  <select id="findAll" resultType="MockOrg">
+    SELECT org_code, org_name FROM mock_org ORDER BY org_code ASC
+  </select>
+
+  <select id="findByOrgCode" resultType="MockOrg">
+    SELECT org_code, org_name FROM mock_org WHERE org_code = #{orgCode}
+  </select>
+
+  <insert id="insert" parameterType="MockOrg">
+    INSERT INTO mock_org (org_code, org_name) VALUES (#{orgCode}, #{orgName})
+  </insert>
+</mapper>

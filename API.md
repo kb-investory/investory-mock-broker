@@ -128,6 +128,21 @@ client_id/client_secret으로 자신을 증명하고, 유저의 loginId/loginPas
 같은 connectionId를 돌려준다). client_id/client_secret이 틀렸거나 loginId/loginPassword가
 일치하지 않으면 `40101`.
 
+### `GET /mock/system/orgs` — 증권사(org) 전체 목록
+
+인증: `x-client-id`, `x-client-secret` 헤더. 목업 서버가 알고 있는 증권사 목록 전체를
+돌려준다 — 외부 서비스가 자기 쪽 증권사 목록과 동기화할 때 쓴다. 시나리오를 적용하거나
+회원가입할 때 등장한 orgCode는 자동으로 이 목록에 등록된다(아래 `/mock/admin/scenarios` 참고).
+
+**Response** `200`
+```json
+[
+  { "orgCode": "S9990001A", "orgName": "미래에셋증권(모의)" },
+  { "orgCode": "S9990002A", "orgName": "키움증권(모의)" },
+  { "orgCode": "S9990099A", "orgName": "테스트증권(모의)" }
+]
+```
+
 ### 커넥션으로 데이터 접근하기
 
 발급받은 `connectionId`로는 `/mock/**`(`/mock/auth/**`·`/mock/system/**` 제외)와
@@ -241,12 +256,44 @@ client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특
 
 번들 파일 템플릿 ID면 `40001`, 존재하지 않는 templateId면 `40401`.
 
+### `GET /mock/admin/orgs` — 증권사(org) 전체 목록
+
+인증: `x-admin-token` 헤더. `mock_org` 테이블에 등록된 증권사 전체를 돌려준다. `/mock/system/orgs`와
+같은 데이터를 보여주되, 콘솔(운영자)용 인증 경로라는 점만 다르다.
+
+**Response** `200`
+```json
+[
+  { "orgCode": "S9990001A", "orgName": "미래에셋증권(모의)" },
+  { "orgCode": "S9990002A", "orgName": "키움증권(모의)" },
+  { "orgCode": "S9990099A", "orgName": "테스트증권(모의)" }
+]
+```
+
+### `POST /mock/admin/orgs` — 증권사 등록
+
+인증: `x-admin-token` 헤더. 새 증권사를 배포 없이 바로 등록한다. 시나리오를 적용하거나
+회원가입할 때 등장하는 orgCode는 여기 등록돼 있지 않아도 자동으로 등록되므로, 이 API는
+백엔드와의 목록 동기화를 미리 맞춰두고 싶을 때 쓰면 된다.
+
+**Request**
+```json
+{ "orgCode": "S9990003A", "orgName": "삼성증권(모의)" }
+```
+
+**Response** `200`
+```json
+{ "orgCode": "S9990003A", "orgName": "삼성증권(모의)" }
+```
+이미 등록된 orgCode면 `40001`.
+
 ### `POST /mock/admin/scenarios` — 유저에게 시나리오 적용
 
 인증: `x-admin-token` 헤더. **이미 존재하는 유저**(`/mock/auth/register`로 미리 만들어둔
 계정)에게 템플릿 또는 직접 입력한 JSON을 적용해 계좌·시세·거래이력을 통째로 (재)생성한다.
 기존 데이터는 전부 지워진다. `templateId`와 `scenario`(직접 JSON) 중 하나만 채우면 되고,
-둘 다 있으면 `templateId`가 우선한다.
+둘 다 있으면 `templateId`가 우선한다. 여기서 쓰인 orgCode가 `mock_org`에 아직 없으면 자동으로
+등록된다.
 
 **Request (템플릿 적용)**
 ```json

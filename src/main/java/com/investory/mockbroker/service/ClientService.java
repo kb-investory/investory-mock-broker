@@ -115,7 +115,8 @@ public class ClientService {
         return connection.getProfileCode();
     }
 
-    private void authenticateClient(String clientId, String clientSecret) {
+    /** 클라이언트 자격증명만 검증한다 (커넥션/유저와 무관한 단순 시스템 조회용). */
+    public void authenticateClient(String clientId, String clientSecret) {
         if (clientId == null || clientId.isEmpty() || clientSecret == null || clientSecret.isEmpty()) {
             throw MockApiException.unauthorized("x-client-id/x-client-secret 헤더가 필요합니다.");
         }

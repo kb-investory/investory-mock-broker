@@ -2,11 +2,14 @@ package com.investory.mockbroker.controller;
 
 import com.investory.mockbroker.domain.MockAccount;
 import com.investory.mockbroker.domain.MockConnection;
+import com.investory.mockbroker.domain.MockOrg;
 import com.investory.mockbroker.domain.MockUser;
 import com.investory.mockbroker.mapper.AccountMapper;
+import com.investory.mockbroker.mapper.OrgMapper;
 import com.investory.mockbroker.mapper.UserMapper;
 import com.investory.mockbroker.service.ClientService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -33,12 +36,30 @@ public class SystemController {
     private final ClientService clientService;
     private final UserMapper userMapper;
     private final AccountMapper accountMapper;
+    private final OrgMapper orgMapper;
 
     @Autowired
-    public SystemController(ClientService clientService, UserMapper userMapper, AccountMapper accountMapper) {
+    public SystemController(ClientService clientService, UserMapper userMapper, AccountMapper accountMapper,
+                            OrgMapper orgMapper) {
         this.clientService = clientService;
         this.userMapper = userMapper;
         this.accountMapper = accountMapper;
+        this.orgMapper = orgMapper;
+    }
+
+    /** 이 목업 서버가 알고 있는 증권사(org) 전체 목록. 백엔드가 자기 쪽 목록과 동기화할 때 쓴다. */
+    @GetMapping("/orgs")
+    public List<Map<String, Object>> orgs(@RequestHeader(value = "x-client-id", required = false) String clientId,
+                                          @RequestHeader(value = "x-client-secret", required = false) String clientSecret) {
+        clientService.authenticateClient(clientId, clientSecret);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (MockOrg org : orgMapper.findAll()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("orgCode", org.getOrgCode());
+            item.put("orgName", org.getOrgName());
+            result.add(item);
+        }
+        return result;
     }
 
     @PostMapping("/connections")

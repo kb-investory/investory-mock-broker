@@ -2,12 +2,14 @@ package com.investory.mockbroker.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.investory.mockbroker.domain.MockAccount;
+import com.investory.mockbroker.domain.MockOrg;
 import com.investory.mockbroker.domain.MockPrice;
 import com.investory.mockbroker.domain.MockUser;
 import com.investory.mockbroker.dto.MockApiException;
 import com.investory.mockbroker.domain.MockScenarioTemplate;
 import com.investory.mockbroker.mapper.AccountMapper;
 import com.investory.mockbroker.mapper.HoldingMapper;
+import com.investory.mockbroker.mapper.OrgMapper;
 import com.investory.mockbroker.mapper.PriceMapper;
 import com.investory.mockbroker.mapper.TemplateMapper;
 import com.investory.mockbroker.mapper.TransactionMapper;
@@ -72,6 +74,7 @@ public class ScenarioService {
     private final OrderService orderService;
     private final MarketQuoteService marketQuoteService;
     private final ClientService clientService;
+    private final OrgMapper orgMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -82,7 +85,7 @@ public class ScenarioService {
                            PriceMapper priceMapper, HoldingMapper holdingMapper,
                            TransactionMapper transactionMapper, TemplateMapper templateMapper,
                            OrderService orderService, MarketQuoteService marketQuoteService,
-                           ClientService clientService) {
+                           ClientService clientService, OrgMapper orgMapper) {
         this.dataSource = dataSource;
         this.userMapper = userMapper;
         this.accountMapper = accountMapper;
@@ -93,6 +96,7 @@ public class ScenarioService {
         this.orderService = orderService;
         this.marketQuoteService = marketQuoteService;
         this.clientService = clientService;
+        this.orgMapper = orgMapper;
     }
 
     @PostConstruct
@@ -261,6 +265,7 @@ public class ScenarioService {
             throw MockApiException.notFound("등록되지 않은 유저입니다: " + loginId);
         }
         String profileCode = user.getProfileCode();
+        ensureOrg(def.getOrgCode(), def.getOrgName());
         transactionMapper.deleteByProfileCode(profileCode);
         holdingMapper.deleteByProfileCode(profileCode);
         accountMapper.deleteByProfileCode(profileCode);
@@ -315,6 +320,7 @@ public class ScenarioService {
             throw MockApiException.badRequest("이미 사용 중인 아이디입니다: " + loginId);
         }
         String profileCode = "USR_" + loginId;
+        ensureOrg(SIGNUP_ORG_CODE, SIGNUP_ORG_NAME);
 
         MockUser user = new MockUser();
         user.setProfileCode(profileCode);
@@ -350,6 +356,17 @@ public class ScenarioService {
 
         log.info("회원가입 완료: {}", loginId);
         return user;
+    }
+
+    /** orgCode가 mock_org에 없으면 그 자리에서 등록한다 — 백엔드가 동기화하는 목록이 항상 실제 유저 데이터와 맞도록. */
+    private void ensureOrg(String orgCode, String orgName) {
+        if (orgMapper.findByOrgCode(orgCode) == null) {
+            MockOrg org = new MockOrg();
+            org.setOrgCode(orgCode);
+            org.setOrgName(orgName);
+            orgMapper.insert(org);
+            log.info("증권사 자동 등록: {} ({})", orgCode, orgName);
+        }
     }
 
     private void seed(ScenarioDefinition def, String profileCode) {

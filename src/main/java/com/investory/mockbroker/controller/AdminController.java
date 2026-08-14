@@ -1,10 +1,12 @@
 package com.investory.mockbroker.controller;
 
 import com.investory.mockbroker.domain.MockConnection;
+import com.investory.mockbroker.domain.MockOrg;
 import com.investory.mockbroker.domain.MockUser;
 import com.investory.mockbroker.dto.ApplyScenarioRequest;
 import com.investory.mockbroker.dto.MockApiException;
 import com.investory.mockbroker.mapper.ConnectionMapper;
+import com.investory.mockbroker.mapper.OrgMapper;
 import com.investory.mockbroker.mapper.UserMapper;
 import com.investory.mockbroker.seed.ScenarioDefinition;
 import com.investory.mockbroker.service.AdminTokenStore;
@@ -44,14 +46,16 @@ public class AdminController {
     private final ConnectionMapper connectionMapper;
     private final UserMapper userMapper;
     private final ScenarioService scenarioService;
+    private final OrgMapper orgMapper;
 
     @Autowired
     public AdminController(AdminTokenStore tokenStore, ConnectionMapper connectionMapper, UserMapper userMapper,
-                           ScenarioService scenarioService) {
+                           ScenarioService scenarioService, OrgMapper orgMapper) {
         this.tokenStore = tokenStore;
         this.connectionMapper = connectionMapper;
         this.userMapper = userMapper;
         this.scenarioService = scenarioService;
+        this.orgMapper = orgMapper;
     }
 
     @PostMapping("/login")
@@ -99,6 +103,46 @@ public class AdminController {
             result.add(item);
         }
         return result;
+    }
+
+    /** 등록된 증권사(org) 전체 목록. */
+    @GetMapping("/orgs")
+    public List<Map<String, Object>> orgs(
+            @RequestHeader(value = "x-admin-token", required = false) String adminToken) {
+        requireAdmin(adminToken);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (MockOrg org : orgMapper.findAll()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("orgCode", org.getOrgCode());
+            item.put("orgName", org.getOrgName());
+            result.add(item);
+        }
+        return result;
+    }
+
+    /** 새 증권사를 등록한다. 배포 없이 콘솔에서 바로 목록을 늘릴 수 있게 하기 위함. */
+    @PostMapping("/orgs")
+    public Map<String, Object> createOrg(
+            @RequestHeader(value = "x-admin-token", required = false) String adminToken,
+            @RequestBody Map<String, Object> request) {
+        requireAdmin(adminToken);
+        String orgCode = asString(request.get("orgCode"));
+        String orgName = asString(request.get("orgName"));
+        if (orgCode == null || orgCode.isEmpty() || orgName == null || orgName.isEmpty()) {
+            throw MockApiException.badRequest("orgCode와 orgName은 필수입니다.");
+        }
+        if (orgMapper.findByOrgCode(orgCode) != null) {
+            throw MockApiException.badRequest("이미 등록된 증권사 코드입니다: " + orgCode);
+        }
+        MockOrg org = new MockOrg();
+        org.setOrgCode(orgCode);
+        org.setOrgName(orgName);
+        orgMapper.insert(org);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("orgCode", org.getOrgCode());
+        body.put("orgName", org.getOrgName());
+        return body;
     }
 
     /**

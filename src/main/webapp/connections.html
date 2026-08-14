@@ -122,6 +122,24 @@
     </div>
 
     <div class="card">
+      <h2>증권사(org) 목록 <span id="orgCountLabel"></span></h2>
+      <div class="card-body">
+        <div class="row">
+          <div class="field">
+            <label for="orgCodeInput">orgCode</label>
+            <input type="text" id="orgCodeInput" placeholder="S9990003A">
+          </div>
+          <div class="field">
+            <label for="orgNameInput">orgName</label>
+            <input type="text" id="orgNameInput" placeholder="예: 삼성증권(모의)">
+          </div>
+          <button id="addOrgBtn" class="primary">등록</button>
+        </div>
+        <div id="orgTableHolder"><div class="empty">불러오는 중...</div></div>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>전체 커넥션 목록 <span id="countLabel"></span></h2>
       <div id="tableHolder"><div class="empty">불러오는 중...</div></div>
     </div>
@@ -208,9 +226,63 @@ async function loadTemplates(){
   }
 }
 
+function renderOrgRows(rows){
+  if (!rows.length) {
+    $('orgTableHolder').innerHTML = '<div class="empty">등록된 증권사가 없습니다.</div>';
+    $('orgCountLabel').textContent = '';
+    return;
+  }
+  const body = rows.map(r => `
+    <tr>
+      <td>${r.orgCode}</td>
+      <td class="name">${r.orgName}</td>
+    </tr>`).join('');
+  $('orgTableHolder').innerHTML = `
+    <table>
+      <thead><tr><th>orgCode</th><th>orgName</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+  $('orgCountLabel').textContent = `${rows.length}건`;
+}
+
+async function loadOrgs(){
+  try {
+    const res = await fetch('/mock/admin/orgs', { headers: authHeaders() });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '조회 실패');
+    renderOrgRows(body);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function addOrg(){
+  const orgCode = $('orgCodeInput').value.trim();
+  const orgName = $('orgNameInput').value.trim();
+  if (!orgCode || !orgName) {
+    toast('orgCode와 orgName을 입력하세요.', true);
+    return;
+  }
+  try {
+    const res = await fetch('/mock/admin/orgs', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ orgCode, orgName })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '등록 실패');
+    toast(`${body.orgName} 등록 완료.`);
+    $('orgCodeInput').value = '';
+    $('orgNameInput').value = '';
+    await loadOrgs();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
 async function bootstrapAfterLogin(){
   showLoggedIn();
-  await Promise.all([loadConnections(), loadTemplates()]);
+  await Promise.all([loadConnections(), loadTemplates(), loadOrgs()]);
 }
 
 async function login(){
@@ -280,6 +352,7 @@ $('logoutBtn').addEventListener('click', () => {
   showLoggedOut();
 });
 $('applyBtn').addEventListener('click', applyScenario);
+$('addOrgBtn').addEventListener('click', addOrg);
 $('templateSelect').addEventListener('change', () => {
   $('customJsonWrap').style.display = $('templateSelect').value ? 'none' : '';
 });

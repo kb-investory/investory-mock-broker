@@ -74,9 +74,11 @@ public class ScenarioService {
     /** 영업일 하루마다 매수·매도턴이 뜰 기본 확률. */
     private static final double DEFAULT_BUY_PROBABILITY = 0.35;
     private static final double DEFAULT_SELL_PROBABILITY = 0.15;
-    /** 매수·매도턴이 뜨면 그 안에서 몇 종목을 고를지(1~N 사이 무작위). */
-    private static final int MAX_BUY_PICKS_PER_TURN = 3;
-    private static final int MAX_SELL_PICKS_PER_TURN = 2;
+    /** 매수·매도턴이 뜨면, 그 후보(살 수 있는/팔 수 있는) 종목마다 독립적으로 굴려서 포함
+     *  여부를 정하는 확률 — 개수 상한을 두지 않고 후보 규모에 자연스럽게 비례하게 한다.
+     *  매도는 "팔 대상이 있으면 실제로 잘 팔리게" 매수보다 높게 잡았다. */
+    private static final double BUY_PICK_PROBABILITY = 0.15;
+    private static final double SELL_PICK_PROBABILITY = 0.3;
     /** 매수 한 건에 쓸 현금 비율(남은 예수금 대비). */
     private static final double MIN_BUY_CASH_PORTION = 0.05;
     private static final double MAX_BUY_CASH_PORTION = 0.20;
@@ -341,9 +343,10 @@ public class ScenarioService {
                     }
                 }
                 Collections.shuffle(affordable, random);
-                int buyCount = Math.min(affordable.size(), 1 + random.nextInt(MAX_BUY_PICKS_PER_TURN));
-                for (int i = 0; i < buyCount; i++) {
-                    String prodCode = affordable.get(i);
+                for (String prodCode : affordable) {
+                    if (random.nextDouble() >= BUY_PICK_PROBABILITY) {
+                        continue;
+                    }
                     BigDecimal price = todayPrice.get(prodCode);
                     double portion = MIN_BUY_CASH_PORTION
                             + random.nextDouble() * (MAX_BUY_CASH_PORTION - MIN_BUY_CASH_PORTION);
@@ -370,9 +373,10 @@ public class ScenarioService {
                     }
                 }
                 Collections.shuffle(sellable, random);
-                int sellCount = Math.min(sellable.size(), 1 + random.nextInt(MAX_SELL_PICKS_PER_TURN));
-                for (int i = 0; i < sellCount; i++) {
-                    String prodCode = sellable.get(i);
+                for (String prodCode : sellable) {
+                    if (random.nextDouble() >= SELL_PICK_PROBABILITY) {
+                        continue;
+                    }
                     BigDecimal held = holdings.get(prodCode);
                     double portion = MIN_SELL_QTY_PORTION
                             + random.nextDouble() * (MAX_SELL_QTY_PORTION - MIN_SELL_QTY_PORTION);

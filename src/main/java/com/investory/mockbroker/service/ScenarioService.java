@@ -5,6 +5,7 @@ import com.investory.mockbroker.domain.MockAccount;
 import com.investory.mockbroker.domain.MockOrg;
 import com.investory.mockbroker.domain.MockPrice;
 import com.investory.mockbroker.domain.MockUser;
+import com.investory.mockbroker.dto.GenerateScenarioRequest;
 import com.investory.mockbroker.dto.MockApiException;
 import com.investory.mockbroker.domain.MockScenarioTemplate;
 import com.investory.mockbroker.mapper.AccountMapper;
@@ -15,7 +16,6 @@ import com.investory.mockbroker.mapper.TemplateMapper;
 import com.investory.mockbroker.mapper.TransactionMapper;
 import com.investory.mockbroker.mapper.UserMapper;
 import com.investory.mockbroker.seed.ScenarioDefinition;
-import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,9 +25,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
-import javax.sql.DataSource;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -64,7 +64,10 @@ public class ScenarioService {
         {"042700", "한미반도체", "KOSPI", "96500"},
     };
 
-    private final DataSource dataSource;
+    /** generateHistoricalTemplate에서 prodCodes를 안 넘겼을 때 기본으로 쓸 시가총액 상위 종목 수. */
+    private static final int DEFAULT_KOSPI_TOP_N = 20;
+    private static final int DEFAULT_KOSDAQ_TOP_N = 10;
+
     private final UserMapper userMapper;
     private final AccountMapper accountMapper;
     private final PriceMapper priceMapper;
@@ -75,18 +78,19 @@ public class ScenarioService {
     private final MarketQuoteService marketQuoteService;
     private final ClientService clientService;
     private final OrgMapper orgMapper;
+    private final StockMasterService stockMasterService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private final Map<String, ScenarioDefinition> scenarios = new LinkedHashMap<>();
 
     @Autowired
-    public ScenarioService(DataSource dataSource, UserMapper userMapper, AccountMapper accountMapper,
+    public ScenarioService(UserMapper userMapper, AccountMapper accountMapper,
                            PriceMapper priceMapper, HoldingMapper holdingMapper,
                            TransactionMapper transactionMapper, TemplateMapper templateMapper,
                            OrderService orderService, MarketQuoteService marketQuoteService,
-                           ClientService clientService, OrgMapper orgMapper) {
-        this.dataSource = dataSource;
+                           ClientService clientService, OrgMapper orgMapper,
+                           StockMasterService stockMasterService) {
         this.userMapper = userMapper;
         this.accountMapper = accountMapper;
         this.priceMapper = priceMapper;
@@ -97,22 +101,13 @@ public class ScenarioService {
         this.marketQuoteService = marketQuoteService;
         this.clientService = clientService;
         this.orgMapper = orgMapper;
+        this.stockMasterService = stockMasterService;
     }
 
     @PostConstruct
     public void init() {
-        initSchema();
         clientService.ensureDefaultClient();
         loadScenarioFiles();
-    }
-
-    /** db/migration의 버전드 마이그레이션을 적용한다. 이미 적용된 버전은 Flyway가 알아서 건너뛴다. */
-    private void initSchema() {
-        Flyway.configure()
-                .dataSource(dataSource)
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
     }
 
     private void loadScenarioFiles() {
@@ -200,6 +195,128 @@ public class ScenarioService {
         if (affected == 0) {
             throw MockApiException.notFound("등록되지 않은 템플릿입니다: " + templateId);
         }
+    }
+
+    /**
+     * 종목별 실제 과거 종가(네이버 일별시세)로 매수 거래를 채운 시나리오 템플릿을 만들어 DB에
+     * 저장한다. 본 서비스 분석 기능이 요구하는 "최소 N일치 거래이력" 테스트 데이터를 손으로
+     * 가격을 지어내지 않고 준비하기 위함이다 — 계좌 개설일도 그 기간 시작일로 맞춘다.
+     */
+    public synchronized ScenarioDefinition generateHistoricalTemplate(GenerateScenarioRequest req) {
+        if (req.getTemplateId() == null || req.getTemplateId().isEmpty()) {
+            throw MockApiException.badRequest("templateId는 필수입니다.");
+        }
+        if (req.getOrgCode() == null || req.getOrgCode().isEmpty()
+                || req.getOrgName() == null || req.getOrgName().isEmpty()) {
+            throw MockApiException.badRequest("orgCode/orgName은 필수입니다.");
+        }
+        if (req.getAccountNum() == null || req.getAccountNum().isEmpty()) {
+            throw MockApiException.badRequest("accountNum은 필수입니다.");
+        }
+
+        BigDecimal initialCash = req.getInitialCash() != null ? req.getInitialCash() : new BigDecimal("10000000");
+        int days = req.getDays() != null ? req.getDays() : 90;
+        int tradesPerProduct = req.getTradesPerProduct() != null ? req.getTradesPerProduct() : 4;
+        if (days < 1 || tradesPerProduct < 1) {
+            throw MockApiException.badRequest("days와 tradesPerProduct는 1 이상이어야 합니다.");
+        }
+
+        // prodCodes를 안 넘기면 지금 시점 시가총액 순위(코스피 상위 20 + 코스닥 상위 10)를 실시간
+        // 조회해 기본 바스켓으로 쓴다 — 순위를 코드에 박아두면 바뀔 때마다 재배포해야 하므로.
+        List<String> prodCodes;
+        Map<String, String[]> marketCapNames = new LinkedHashMap<>();
+        if (req.getProdCodes() != null && !req.getProdCodes().isEmpty()) {
+            prodCodes = req.getProdCodes();
+        } else {
+            prodCodes = new ArrayList<>();
+            for (MarketQuoteService.MarketCapEntry e : marketQuoteService.fetchMarketCapTop("0", DEFAULT_KOSPI_TOP_N)) {
+                prodCodes.add(e.getCode());
+                marketCapNames.put(e.getCode(), new String[]{e.getName(), "KOSPI"});
+            }
+            for (MarketQuoteService.MarketCapEntry e : marketQuoteService.fetchMarketCapTop("1", DEFAULT_KOSDAQ_TOP_N)) {
+                prodCodes.add(e.getCode());
+                marketCapNames.put(e.getCode(), new String[]{e.getName(), "KOSDAQ"});
+            }
+            if (prodCodes.isEmpty()) {
+                throw MockApiException.badRequest(
+                        "prodCodes가 없고 시가총액 순위 조회도 실패했습니다. prodCodes를 직접 지정하세요.");
+            }
+        }
+
+        LocalDate to = LocalDate.now();
+        LocalDate from = to.minusDays(days);
+        // 종목당 예산을 고르게 나누고 10% 여유를 둬서, 수수료 때문에 예수금 부족으로 재생이
+        // 실패하는 일이 없게 한다.
+        BigDecimal perTradeBudget = initialCash
+                .multiply(new BigDecimal("0.9"))
+                .divide(new BigDecimal(prodCodes.size() * tradesPerProduct), 0, RoundingMode.DOWN);
+
+        List<ScenarioDefinition.TradeSeed> trades = new ArrayList<>();
+        List<ScenarioDefinition.PriceSeed> prices = new ArrayList<>();
+
+        for (String prodCode : prodCodes) {
+            List<MarketQuoteService.HistoricalPrice> history =
+                    marketQuoteService.fetchHistoricalPrices(prodCode, from, to);
+            if (history.isEmpty()) {
+                throw MockApiException.badRequest("과거 시세를 가져오지 못했습니다: " + prodCode);
+            }
+
+            String[] known = marketCapNames.get(prodCode);
+            ScenarioDefinition.PriceSeed master = stockMasterService.findByCode(prodCode);
+            ScenarioDefinition.PriceSeed price = new ScenarioDefinition.PriceSeed();
+            price.setProdCode(prodCode);
+            price.setProdName(known != null ? known[0] : master != null ? master.getProdName() : prodCode);
+            price.setMarketType(known != null ? known[1] : master != null ? master.getMarketType() : "KOSPI");
+            if (master != null) {
+                price.setProdType(master.getProdType());
+                price.setExCode(master.getExCode());
+            }
+            price.setCurrentPrice(history.get(history.size() - 1).getClosePrice());
+            prices.add(price);
+
+            int step = Math.max(1, history.size() / tradesPerProduct);
+            int picked = 0;
+            for (int i = 0; i < history.size() && picked < tradesPerProduct; i += step) {
+                MarketQuoteService.HistoricalPrice h = history.get(i);
+                BigDecimal quantity = perTradeBudget.divide(h.getClosePrice(), 0, RoundingMode.DOWN);
+                if (quantity.compareTo(BigDecimal.ONE) < 0) {
+                    continue;
+                }
+                ScenarioDefinition.TradeSeed trade = new ScenarioDefinition.TradeSeed();
+                trade.setAccountNum(req.getAccountNum());
+                trade.setTradedAt(h.getDate() + "093000");
+                trade.setSide("BUY");
+                trade.setProdCode(prodCode);
+                trade.setQuantity(quantity);
+                trade.setPrice(h.getClosePrice());
+                trades.add(trade);
+                picked++;
+            }
+        }
+
+        ScenarioDefinition.AccountSeed account = new ScenarioDefinition.AccountSeed();
+        account.setAccountNum(req.getAccountNum());
+        account.setAccountName(req.getAccountName());
+        account.setAccountType(req.getAccountType());
+        account.setIssueDate(from.format(DateTimeFormatter.BASIC_ISO_DATE));
+        account.setInitialCash(initialCash);
+
+        ScenarioDefinition def = new ScenarioDefinition();
+        def.setTemplateId(req.getTemplateId());
+        def.setProfileName(req.getProfileName() != null && !req.getProfileName().isEmpty()
+                ? req.getProfileName() : req.getTemplateId());
+        def.setDescription(req.getDescription() != null ? req.getDescription()
+                : days + "일치 실제 시세로 자동 생성된 시나리오");
+        def.setOrgCode(req.getOrgCode());
+        def.setOrgName(req.getOrgName());
+        def.setPrices(prices);
+        def.setAccounts(new ArrayList<>(List.of(account)));
+        def.setTrades(trades);
+
+        saveCustomTemplate(def);
+        log.info("과거 시세 기반 시나리오 생성 완료: {} - 종목 {}개, 거래 {}건 ({}일)",
+                req.getTemplateId(), prodCodes.size(), trades.size(), days);
+        return def;
     }
 
     private ScenarioDefinition parseDefinition(String json) {

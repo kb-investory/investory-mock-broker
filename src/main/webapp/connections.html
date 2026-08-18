@@ -144,6 +144,53 @@
     </div>
 
     <div class="card">
+      <h2>과거 데이터 기반 시나리오 생성</h2>
+      <div class="card-body">
+        <p class="hint">
+          종목별 실제 과거 종가(네이버 일별시세)로 매수 거래를 채운 템플릿을 만들어 저장한다.
+          본 서비스 분석 기능이 요구하는 최소 기간치 거래이력을 손으로 가격을 지어내지 않고
+          준비할 때 쓴다. 종목코드를 비우면 지금 시점 시가총액 순위(코스피 상위 20 + 코스닥
+          상위 10)를 실시간 조회해 기본 바스켓으로 쓴다. 저장만 하고 유저에게 적용하지는 않는다.
+        </p>
+        <div class="row">
+          <div class="field">
+            <label for="genTemplateIdInput">templateId</label>
+            <input type="text" id="genTemplateIdInput" placeholder="HISTORICAL_90D_01">
+          </div>
+          <div class="field">
+            <label for="genProfileNameInput">profileName</label>
+            <input type="text" id="genProfileNameInput" placeholder="실거래 90일 이력">
+          </div>
+          <div class="field">
+            <label for="genOrgSelect">증권사</label>
+            <select id="genOrgSelect">
+              <option value="">증권사를 고르세요</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="genAccountNumInput">accountNum</label>
+            <input type="text" id="genAccountNumInput" placeholder="5019999999">
+          </div>
+          <div class="field">
+            <label for="genInitialCashInput">initialCash</label>
+            <input type="text" id="genInitialCashInput" placeholder="500000000">
+          </div>
+          <div class="field">
+            <label for="genDaysInput">days</label>
+            <input type="text" id="genDaysInput" placeholder="90">
+          </div>
+          <div class="field">
+            <label for="genProdCodesInput">종목코드 (쉼표, 비우면 시총 상위 30)</label>
+            <input type="text" id="genProdCodesInput" placeholder="005930,000660">
+          </div>
+          <button id="generateTemplateBtn" class="primary">생성</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>저장된 템플릿 <span id="templateCountLabel"></span></h2>
       <div id="templateListHolder"><div class="empty">불러오는 중...</div></div>
     </div>
@@ -185,6 +232,7 @@
 const $ = id => document.getElementById(id);
 let toastTimer;
 let templates = [];
+let orgs = [];
 
 function toast(message, isError){
   const el = $('toast');
@@ -446,7 +494,11 @@ async function loadOrgs(){
     const res = await fetch('/mock/admin/orgs', { headers: authHeaders() });
     const body = await res.json();
     if (!res.ok) throw new Error(body.rsp_msg || '조회 실패');
+    orgs = body;
     renderOrgRows(body);
+    const opts = ['<option value="">증권사를 고르세요</option>']
+      .concat(orgs.map(o => `<option value="${o.orgCode}">${o.orgName} (${o.orgCode})</option>`));
+    $('genOrgSelect').innerHTML = opts.join('');
   } catch (e) {
     toast(e.message, true);
   }
@@ -538,6 +590,43 @@ async function saveTemplate(){
   }
 }
 
+async function generateTemplate(){
+  const templateId = $('genTemplateIdInput').value.trim();
+  const orgCode = $('genOrgSelect').value;
+  const accountNum = $('genAccountNumInput').value.trim();
+  if (!templateId || !orgCode || !accountNum) {
+    toast('templateId/증권사/accountNum을 입력하세요.', true);
+    return;
+  }
+  const org = orgs.find(o => o.orgCode === orgCode);
+  const payload = { templateId, orgCode, orgName: org.orgName, accountNum };
+  const profileName = $('genProfileNameInput').value.trim();
+  if (profileName) payload.profileName = profileName;
+  const initialCash = $('genInitialCashInput').value.trim();
+  if (initialCash) payload.initialCash = Number(initialCash);
+  const days = $('genDaysInput').value.trim();
+  if (days) payload.days = Number(days);
+  const prodCodesRaw = $('genProdCodesInput').value.trim();
+  if (prodCodesRaw) payload.prodCodes = prodCodesRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+  try {
+    const res = await fetch('/mock/admin/templates/generate', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '생성 실패');
+    toast(`템플릿 "${body.templateId}" 생성 완료 (거래 ${body.tradeCount}건).`);
+    $('genTemplateIdInput').value = '';
+    $('genProfileNameInput').value = '';
+    await loadTemplates();
+    await loadUsers();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
 $('loginBtn').addEventListener('click', login);
 $('adminPwInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 $('logoutBtn').addEventListener('click', () => {
@@ -545,6 +634,7 @@ $('logoutBtn').addEventListener('click', () => {
   showLoggedOut();
 });
 $('saveTemplateBtn').addEventListener('click', saveTemplate);
+$('generateTemplateBtn').addEventListener('click', generateTemplate);
 $('createUserBtn').addEventListener('click', createUser);
 $('addOrgBtn').addEventListener('click', addOrg);
 

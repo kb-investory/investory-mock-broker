@@ -245,6 +245,48 @@ client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특
 
 `templateId`가 없으면 `40001`, 번들 파일 템플릿과 겹치면 `40001`.
 
+### `POST /mock/admin/templates/generate` — 과거 시세 기반 템플릿 생성
+
+인증: `x-admin-token` 헤더. 종목별 실제 과거 종가(네이버 일별시세)로 매수 거래를 채운 시나리오를
+만들어 커스텀 템플릿으로 저장한다(위 `POST /mock/admin/templates`와 마찬가지로 저장만 하고
+유저에게 적용하지는 않는다). 본 서비스 분석 기능이 요구하는 최소 기간치 거래이력을 손으로
+가격을 지어내지 않고 준비할 때 쓴다.
+
+`prodCodes`를 비우면 호출 시점 시가총액 순위(코스피 상위 20 + 코스닥 상위 10, ETF·우선주는
+최선 노력으로 제외)를 실시간 조회해 기본 바스켓으로 쓴다 — 순위가 바뀌어도 재배포 없이 항상
+최신 구성으로 생성된다. 종목당 거래는 `tradesPerProduct`(기본 4)회, `days`(기본 90)일 구간에
+고르게 분산되고, 예수금은 종목·거래 수만큼 균등 배분한 뒤 10% 여유를 둬서 재생 중 예수금 부족이
+나지 않게 한다. 계좌 개설일(`issueDate`)도 그 기간 시작일로 맞춘다.
+
+**Request**
+```json
+{
+  "templateId": "HISTORICAL_90D_01",
+  "profileName": "실거래 90일 이력",
+  "description": "선택, 비우면 자동 생성",
+  "orgCode": "S9990001A",
+  "orgName": "미래에셋증권(모의)",
+  "accountNum": "5019999999",
+  "accountName": "선택, 기본 종합위탁계좌",
+  "accountType": "선택, 기본 101",
+  "initialCash": 500000000,
+  "days": 90,
+  "tradesPerProduct": 4,
+  "prodCodes": ["005930", "000660"]
+}
+```
+
+**Response** `200`
+```json
+{ "templateId": "HISTORICAL_90D_01", "profileName": "실거래 90일 이력", "tradeCount": 120,
+  "message": "과거 시세 기반 템플릿을 생성했습니다." }
+```
+
+`templateId`/`orgCode`/`orgName`/`accountNum`이 없으면 `40001`. `prodCodes`를 넘겼는데 그 종목의
+과거 시세를 못 가져오면(존재하지 않는 코드 등) `40001`. `prodCodes`를 안 넘겼는데 시가총액 순위
+조회 자체가 실패하면(네트워크 문제, `MOCKBROKER_QUOTE_ENABLED=false` 등) `40001` — 이 경우
+`prodCodes`를 직접 지정해야 한다.
+
 ### `DELETE /mock/admin/templates/{templateId}` — 커스텀 템플릿 삭제
 
 인증: `x-admin-token` 헤더. DB에 저장된 커스텀 템플릿만 삭제 가능하다.

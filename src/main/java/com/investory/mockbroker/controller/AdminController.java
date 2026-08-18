@@ -5,6 +5,7 @@ import com.investory.mockbroker.domain.MockOrg;
 import com.investory.mockbroker.domain.MockUser;
 import com.investory.mockbroker.dto.AdminCreateUserRequest;
 import com.investory.mockbroker.dto.ApplyScenarioRequest;
+import com.investory.mockbroker.dto.GenerateScenarioRequest;
 import com.investory.mockbroker.dto.MockApiException;
 import com.investory.mockbroker.mapper.AccountMapper;
 import com.investory.mockbroker.mapper.ConnectionMapper;
@@ -139,6 +140,25 @@ public class AdminController {
         body.put("templateId", scenario.getTemplateId());
         body.put("profileName", scenario.getProfileName());
         body.put("message", "템플릿을 저장했습니다.");
+        return body;
+    }
+
+    /**
+     * 종목별 실제 과거 종가로 매수 거래를 채운 시나리오 템플릿을 만들어 DB에 저장한다(저장만 하고
+     * 유저에게 적용하지는 않는다 — 적용은 "유저 생성"/"유저 관리"에서 별도로 한다). 본 서비스
+     * 분석 기능이 요구하는 최소 N일치 거래이력 테스트 데이터를 준비하는 용도.
+     */
+    @PostMapping("/templates/generate")
+    public Map<String, Object> generateTemplate(
+            @RequestHeader(value = "x-admin-token", required = false) String adminToken,
+            @RequestBody GenerateScenarioRequest request) {
+        requireAdmin(adminToken);
+        ScenarioDefinition def = scenarioService.generateHistoricalTemplate(request);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("templateId", def.getTemplateId());
+        body.put("profileName", def.getProfileName());
+        body.put("tradeCount", def.getTrades().size());
+        body.put("message", "과거 시세 기반 템플릿을 생성했습니다.");
         return body;
     }
 

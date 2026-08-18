@@ -18,6 +18,7 @@ import com.investory.mockbroker.seed.ScenarioDefinition;
 import com.investory.mockbroker.service.AccessTokenStore;
 import com.investory.mockbroker.service.AdminTokenStore;
 import com.investory.mockbroker.service.ScenarioService;
+import com.investory.mockbroker.service.StockMasterService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -62,13 +63,15 @@ public class AdminController {
     private final TransactionMapper transactionMapper;
     private final ScenarioService scenarioService;
     private final OrgMapper orgMapper;
+    private final StockMasterService stockMasterService;
 
     @Autowired
     public AdminController(AdminTokenStore tokenStore, AccessTokenStore accessTokenStore,
                            ConnectionMapper connectionMapper, UserMapper userMapper,
                            AccountMapper accountMapper, HoldingMapper holdingMapper,
                            PriceMapper priceMapper, TransactionMapper transactionMapper,
-                           ScenarioService scenarioService, OrgMapper orgMapper) {
+                           ScenarioService scenarioService, OrgMapper orgMapper,
+                           StockMasterService stockMasterService) {
         this.tokenStore = tokenStore;
         this.accessTokenStore = accessTokenStore;
         this.connectionMapper = connectionMapper;
@@ -79,6 +82,7 @@ public class AdminController {
         this.transactionMapper = transactionMapper;
         this.scenarioService = scenarioService;
         this.orgMapper = orgMapper;
+        this.stockMasterService = stockMasterService;
     }
 
     @PostMapping("/login")
@@ -141,6 +145,21 @@ public class AdminController {
         body.put("profileName", scenario.getProfileName());
         body.put("message", "템플릿을 저장했습니다.");
         return body;
+    }
+
+    /** 코스피 전 종목 코드·이름 (과거 시세 기반 시나리오 생성 카드의 종목 선택창용, 네트워크 호출 없음). */
+    @GetMapping("/products")
+    public List<Map<String, Object>> products(
+            @RequestHeader(value = "x-admin-token", required = false) String adminToken) {
+        requireAdmin(adminToken);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ScenarioDefinition.PriceSeed p : stockMasterService.listAll()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("prodCode", p.getProdCode());
+            item.put("prodName", p.getProdName());
+            result.add(item);
+        }
+        return result;
     }
 
     /**

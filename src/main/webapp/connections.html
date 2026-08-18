@@ -60,6 +60,13 @@
        background:#F0F2F5;color:var(--muted);font-family:var(--sans)}
   .badge.db{background:#E7EFFB;color:var(--sell)}
 
+  .chip-list{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 6px 4px 10px;
+       border-radius:14px;background:#F0F2F5;font-family:var(--mono);color:var(--ink)}
+  .chip button{border:none;background:none;padding:0;width:16px;height:16px;line-height:1;
+       font-size:14px;color:var(--muted);cursor:pointer;border-radius:50%}
+  .chip button:hover{background:#DCE0E6;color:var(--ink)}
+
   .login-wrap{max-width:340px;margin:80px auto}
   .login-wrap .card-body{padding:20px}
   .login-wrap label{display:block;margin-bottom:5px}
@@ -181,11 +188,19 @@
             <label for="genDaysInput">days</label>
             <input type="text" id="genDaysInput" placeholder="90">
           </div>
-          <div class="field">
-            <label for="genProdCodesInput">종목코드 (쉼표, 비우면 시총 상위 30)</label>
-            <input type="text" id="genProdCodesInput" placeholder="005930,000660">
-          </div>
           <button id="generateTemplateBtn" class="primary">생성</button>
+        </div>
+        <div class="row">
+          <div class="field" style="flex:1;min-width:260px">
+            <label for="genProductPickSelect">종목 추가 (비우면 시총 상위 30 기본 사용)</label>
+            <select id="genProductPickSelect">
+              <option value="">종목을 고르세요</option>
+            </select>
+          </div>
+          <button id="genAddProductBtn" type="button">추가</button>
+        </div>
+        <div class="chip-list" id="genProductChips">
+          <span class="hint">선택된 종목 없음 — 비우면 시총 상위 30(코스피 20 + 코스닥 10)을 자동으로 씁니다.</span>
         </div>
       </div>
     </div>
@@ -233,6 +248,8 @@ const $ = id => document.getElementById(id);
 let toastTimer;
 let templates = [];
 let orgs = [];
+let products = [];
+let genSelectedProducts = [];
 
 function toast(message, isError){
   const el = $('toast');
@@ -528,10 +545,58 @@ async function addOrg(){
   }
 }
 
+async function loadProducts(){
+  try {
+    const res = await fetch('/mock/admin/products', { headers: authHeaders() });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.rsp_msg || '조회 실패');
+    products = body;
+    const opts = ['<option value="">종목을 고르세요</option>']
+      .concat(products.map(p => `<option value="${p.prodCode}">${p.prodName} (${p.prodCode})</option>`));
+    $('genProductPickSelect').innerHTML = opts.join('');
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function renderProductChips(){
+  if (!genSelectedProducts.length) {
+    $('genProductChips').innerHTML =
+      '<span class="hint">선택된 종목 없음 — 비우면 시총 상위 30(코스피 20 + 코스닥 10)을 자동으로 씁니다.</span>';
+    return;
+  }
+  $('genProductChips').innerHTML = genSelectedProducts.map(p => `
+    <span class="chip">${p.prodName} (${p.prodCode})
+      <button type="button" data-remove-product="${p.prodCode}" aria-label="제거">×</button>
+    </span>`).join('');
+  $('genProductChips').querySelectorAll('[data-remove-product]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      genSelectedProducts = genSelectedProducts.filter(p => p.prodCode !== btn.dataset.removeProduct);
+      renderProductChips();
+    });
+  });
+}
+
+function addGenProduct(){
+  const prodCode = $('genProductPickSelect').value;
+  if (!prodCode) {
+    toast('종목을 고르세요.', true);
+    return;
+  }
+  if (genSelectedProducts.some(p => p.prodCode === prodCode)) {
+    toast('이미 추가된 종목입니다.', true);
+    return;
+  }
+  const product = products.find(p => p.prodCode === prodCode);
+  genSelectedProducts.push(product);
+  renderProductChips();
+  $('genProductPickSelect').value = '';
+}
+
 async function bootstrapAfterLogin(){
   showLoggedIn();
   await loadTemplates();
-  await Promise.all([loadConnections(), loadUsers(), loadOrgs()]);
+  await Promise.all([loadConnections(), loadUsers(), loadOrgs(), loadProducts()]);
 }
 
 async function login(){
@@ -606,8 +671,7 @@ async function generateTemplate(){
   if (initialCash) payload.initialCash = Number(initialCash);
   const days = $('genDaysInput').value.trim();
   if (days) payload.days = Number(days);
-  const prodCodesRaw = $('genProdCodesInput').value.trim();
-  if (prodCodesRaw) payload.prodCodes = prodCodesRaw.split(',').map(s => s.trim()).filter(Boolean);
+  if (genSelectedProducts.length) payload.prodCodes = genSelectedProducts.map(p => p.prodCode);
 
   try {
     const res = await fetch('/mock/admin/templates/generate', {
@@ -620,6 +684,8 @@ async function generateTemplate(){
     toast(`템플릿 "${body.templateId}" 생성 완료 (거래 ${body.tradeCount}건).`);
     $('genTemplateIdInput').value = '';
     $('genProfileNameInput').value = '';
+    genSelectedProducts = [];
+    renderProductChips();
     await loadTemplates();
     await loadUsers();
   } catch (e) {
@@ -637,6 +703,7 @@ $('saveTemplateBtn').addEventListener('click', saveTemplate);
 $('generateTemplateBtn').addEventListener('click', generateTemplate);
 $('createUserBtn').addEventListener('click', createUser);
 $('addOrgBtn').addEventListener('click', addOrg);
+$('genAddProductBtn').addEventListener('click', addGenProduct);
 
 if (sessionStorage.getItem('mb_admin_token')) {
   bootstrapAfterLogin();

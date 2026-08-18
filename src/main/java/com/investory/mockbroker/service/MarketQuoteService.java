@@ -41,9 +41,10 @@ public class MarketQuoteService {
     private static final String MARKET_CAP_URL = "https://finance.naver.com/sise/sise_market_sum.naver";
     private static final int TIMEOUT_MS = 2000;
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
-    /** 네이버 일별시세 응답이 완전한 JSON이 아니라(헤더 행만 홑따옴표) 데이터 행만 정규식으로 뽑아낸다. */
+    /** 네이버 일별시세 응답이 완전한 JSON이 아니라(헤더 행만 홑따옴표) 데이터 행만 정규식으로 뽑아낸다.
+     *  날짜와 종가만 쓰므로 시가·고가·저가는 건너뛴다. */
     private static final Pattern HISTORY_ROW = Pattern.compile(
-            "\\[\"(\\d{8})\",\\s*([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+),");
+            "\\[\"(\\d{8})\",\\s*[\\d.]+,\\s*[\\d.]+,\\s*[\\d.]+,\\s*([\\d.]+),");
     private static final Pattern MARKET_CAP_ROW = Pattern.compile(
             "code=(\\d{6})\"[^>]*class=\"tltle\">([^<]+)</a>");
     /** 시가총액 순위 페이지에 같이 뜨는 ETF/ETN 상품명 접두어 — 완전한 목록은 아니고, 데모용
@@ -113,10 +114,8 @@ public class MarketQuoteService {
             Matcher matcher = HISTORY_ROW.matcher(response.getBody());
             while (matcher.find()) {
                 String date = matcher.group(1);
-                BigDecimal high = new BigDecimal(matcher.group(3));
-                BigDecimal low = new BigDecimal(matcher.group(4));
-                BigDecimal closePrice = new BigDecimal(matcher.group(5));
-                result.add(new HistoricalPrice(date, high, low, closePrice));
+                BigDecimal closePrice = new BigDecimal(matcher.group(2));
+                result.add(new HistoricalPrice(date, closePrice));
             }
             if (result.isEmpty()) {
                 log.warn("네이버 일별시세 조회 결과가 없습니다: {} ({} ~ {})", prodCode, from, to);
@@ -178,23 +177,17 @@ public class MarketQuoteService {
         return false;
     }
 
-    /** 종목의 특정일 고가·저가·종가. {date}는 yyyyMMdd. */
+    /** 종목의 특정일 종가. {date}는 yyyyMMdd. */
     public static class HistoricalPrice {
         private final String date;
-        private final BigDecimal highPrice;
-        private final BigDecimal lowPrice;
         private final BigDecimal closePrice;
 
-        public HistoricalPrice(String date, BigDecimal highPrice, BigDecimal lowPrice, BigDecimal closePrice) {
+        public HistoricalPrice(String date, BigDecimal closePrice) {
             this.date = date;
-            this.highPrice = highPrice;
-            this.lowPrice = lowPrice;
             this.closePrice = closePrice;
         }
 
         public String getDate() { return date; }
-        public BigDecimal getHighPrice() { return highPrice; }
-        public BigDecimal getLowPrice() { return lowPrice; }
         public BigDecimal getClosePrice() { return closePrice; }
     }
 

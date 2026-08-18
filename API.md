@@ -245,6 +245,55 @@ client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특
 
 `templateId`가 없으면 `40001`, 번들 파일 템플릿과 겹치면 `40001`.
 
+### `POST /mock/admin/templates/generate` — 과거 시세 기반 템플릿 생성
+
+인증: `x-admin-token` 헤더. 시나리오 시작일부터 실제 과거 시세(네이버 일별시세)를 하루씩 재생하며
+매수·매도를 확률적으로 섞어 넣은 시나리오를 만들어 커스텀 템플릿으로 저장한다(위
+`POST /mock/admin/templates`와 마찬가지로 저장만 하고 유저에게 적용하지는 않는다). 본 서비스
+분석 기능이 요구하는 최소 기간치 거래이력을 손으로 가격을 지어내지 않고 준비할 때 쓴다.
+
+`prodCodes`를 비우면 호출 시점 시가총액 순위(코스피 상위 20 + 코스닥 상위 10, ETF·우선주는
+최선 노력으로 제외)를 실시간 조회해 기본 바스켓으로 쓴다 — 순위가 바뀌어도 재배포 없이 항상
+최신 구성으로 생성된다.
+
+하루마다: 그 종목이 그날 거래된 기록이 없으면(휴장일 등) 건너뛰고, 아니면 `buyProbability`
+(기본 0.35)·`sellProbability`(기본 0.15)로 매수턴·매도턴이 뜰지 각각 독립적으로 정한다. 뜬 턴이
+있으면 그날 저가~고가 사이에서 종목별 무작위 가격을 하나씩 뽑아두고, **매수턴을 먼저** 그
+가격으로 살 수 있는 종목 일부를 사고, **그 다음 매도턴**이 보유 종목 일부를 판다. 매수 금액은
+그 시점 예수금의 5~20%, 매도 수량은 보유수량의 20~100%를 무작위로 쓴다.
+예수금·보유수량은 생성 시점에 직접 추적해서 재생 중 예수금/보유수량 부족이 나지 않게 한다.
+계좌 개설일(`issueDate`)도 그 기간 시작일로 맞춘다.
+
+**Request**
+```json
+{
+  "templateId": "HISTORICAL_90D_01",
+  "profileName": "실거래 90일 이력",
+  "description": "선택, 비우면 자동 생성",
+  "orgCode": "S9990001A",
+  "orgName": "미래에셋증권(모의)",
+  "accountNum": "5019999999",
+  "accountName": "선택, 기본 종합위탁계좌",
+  "accountType": "선택, 기본 101",
+  "initialCash": 500000000,
+  "days": 90,
+  "buyProbability": 0.35,
+  "sellProbability": 0.15,
+  "prodCodes": ["005930", "000660"]
+}
+```
+
+**Response** `200`
+```json
+{ "templateId": "HISTORICAL_90D_01", "profileName": "실거래 90일 이력", "tradeCount": 120,
+  "message": "과거 시세 기반 템플릿을 생성했습니다." }
+```
+
+`templateId`/`orgCode`/`orgName`/`accountNum`이 없으면 `40001`. `prodCodes`를 넘겼는데 그 종목의
+과거 시세를 못 가져오면(존재하지 않는 코드 등) `40001`. `prodCodes`를 안 넘겼는데 시가총액 순위
+조회 자체가 실패하면(네트워크 문제, `MOCKBROKER_QUOTE_ENABLED=false` 등) `40001` — 이 경우
+`prodCodes`를 직접 지정해야 한다.
+
 ### `DELETE /mock/admin/templates/{templateId}` — 커스텀 템플릿 삭제
 
 인증: `x-admin-token` 헤더. DB에 저장된 커스텀 템플릿만 삭제 가능하다.
@@ -464,9 +513,11 @@ client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특
 아직 시나리오가 한 번도 적용되지 않은 유저(예: 방금 회원가입만 하고 관제 콘솔에서 시나리오를
 적용받지 않은 경우)면 `40001`.
 
-### `GET /mock/state?accountNum={선택}` — 콘솔용 통합 상태 조회
+### `GET /mock/state?accountNum={선택}&txnLimit={선택,기본500}` — 콘솔용 통합 상태 조회
 
-`accountNum` 생략 시 첫 번째 계좌 기준.
+`accountNum` 생략 시 첫 번째 계좌 기준. `transactions`는 최신순으로 `txnLimit`건까지만 담는다
+(전체 개수가 아니라 "최근 N건" 스냅샷 — 계좌 전체 이력을 페이지네이션까지 정확히 훑어야 하면
+`/v2/invest/accounts/transactions`를 쓴다).
 
 **Response** `200`
 ```json

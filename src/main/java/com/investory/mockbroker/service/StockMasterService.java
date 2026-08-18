@@ -64,6 +64,11 @@ public class StockMasterService {
         return new ArrayList<>(byCode.values());
     }
 
+    /** 종목코드로 마스터 목록에서 코드·이름·시장구분을 찾는다. 없으면 null. */
+    public ScenarioDefinition.PriceSeed findByCode(String prodCode) {
+        return byCode.get(prodCode);
+    }
+
     /**
      * 이 유저 앞으로 이 종목의 현재가를 확인한다.
      * 이미 조회·거래된 적 있으면 저장된 값을 그대로 돌려주고, 처음 보는 종목이면 지금 네이버에서

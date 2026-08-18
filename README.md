@@ -22,20 +22,9 @@ Investory 본 서비스가 실제 증권사 대신 이 서버에 붙어 계좌·
    cp .env.example .env
    ```
 
-2. MySQL에 `.env`의 `DB_NAME`과 같은 이름의 스키마를 만들고, `scripts/full_schema.sql`을
-   적용해 테이블을 만들어둡니다(앱은 더 이상 기동 시점에 스키마를 자동으로 만들지 않습니다 —
-   메인 서비스와 DB를 통일해 쓰기 때문입니다).
-
-   ```sql
-   CREATE DATABASE mockbroker CHARACTER SET utf8mb4;
-   ```
-
-   ```bash
-   mysql --default-character-set=utf8mb4 -h <host> -u <user> -p mockbroker < scripts/full_schema.sql
-   ```
-
-   `--default-character-set=utf8mb4`를 빼먹으면 시드로 들어가는 한글 증권사명이 깨진 채로
-   저장되니 주의하세요.
+2. `.env`의 `DB_NAME`이 가리키는 스키마가 이미 준비되어 있어야 합니다. 이 앱은 더 이상 기동
+   시점에 스키마를 자동으로 만들지 않습니다 — 메인 서비스와 DB를 통일해 쓰고, 스키마는 별도
+   프로젝트에서 관리합니다.
 
 3. 빌드하고 띄웁니다.
 
@@ -64,9 +53,9 @@ Settings → Secrets에 `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY`/`DEPLOY_PAT
 ## 데이터가 사는 곳
 
 런타임 상태는 **MySQL 8.4**에, 초기 데이터는 **`resources/scenarios/*.json`**에 있습니다.
-스키마는 앱이 자동으로 관리하지 않습니다 — 메인 서비스와 DB를 통일해서 쓰기 때문에,
-`scripts/full_schema.sql`을 그 DB에 한 번 적용해두면 됩니다. 완전히 처음 상태로 되돌리려면
-MySQL에서 이 스키마의 테이블을 직접 비우면 됩니다.
+스키마는 앱이 자동으로 관리하지 않습니다 — 메인 서비스와 DB를 통일해서 쓰고, 스키마 자체는
+별도 프로젝트에서 관리합니다. 완전히 처음 상태로 되돌리려면 MySQL에서 이 스키마의 테이블을
+직접 비우면 됩니다.
 
 각 데모 유저의 데이터는 `profile_code` 컬럼으로 완전히 분리되어 있어, 여러 유저가 동시에
 로그인해 있어도 서로의 계좌·시세·거래에 전혀 영향을 주지 않습니다.

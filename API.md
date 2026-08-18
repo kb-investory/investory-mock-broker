@@ -513,9 +513,11 @@ client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특
 아직 시나리오가 한 번도 적용되지 않은 유저(예: 방금 회원가입만 하고 관제 콘솔에서 시나리오를
 적용받지 않은 경우)면 `40001`.
 
-### `GET /mock/state?accountNum={선택}` — 콘솔용 통합 상태 조회
+### `GET /mock/state?accountNum={선택}&txnLimit={선택,기본500}` — 콘솔용 통합 상태 조회
 
-`accountNum` 생략 시 첫 번째 계좌 기준.
+`accountNum` 생략 시 첫 번째 계좌 기준. `transactions`는 최신순으로 `txnLimit`건까지만 담는다
+(전체 개수가 아니라 "최근 N건" 스냅샷 — 계좌 전체 이력을 페이지네이션까지 정확히 훑어야 하면
+`/v2/invest/accounts/transactions`를 쓴다).
 
 **Response** `200`
 ```json

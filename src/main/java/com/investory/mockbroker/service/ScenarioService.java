@@ -23,6 +23,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.annotation.PostConstruct;
 import java.io.InputStream;
@@ -101,6 +103,7 @@ public class ScenarioService {
     private final ClientService clientService;
     private final OrgMapper orgMapper;
     private final StockMasterService stockMasterService;
+    private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -112,7 +115,7 @@ public class ScenarioService {
                            TransactionMapper transactionMapper, TemplateMapper templateMapper,
                            OrderService orderService, MarketQuoteService marketQuoteService,
                            ClientService clientService, OrgMapper orgMapper,
-                           StockMasterService stockMasterService) {
+                           StockMasterService stockMasterService, PlatformTransactionManager transactionManager) {
         this.userMapper = userMapper;
         this.accountMapper = accountMapper;
         this.priceMapper = priceMapper;
@@ -123,6 +126,7 @@ public class ScenarioService {
         this.marketQuoteService = marketQuoteService;
         this.clientService = clientService;
         this.orgMapper = orgMapper;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.stockMasterService = stockMasterService;
     }
 
@@ -654,9 +658,15 @@ public class ScenarioService {
         // 거래를 시간순으로 재생하면 보유수량·평균단가·예수금이 자동으로 맞춰진다.
         List<ScenarioDefinition.TradeSeed> trades = new ArrayList<>(def.getTrades());
         trades.sort(Comparator.comparing(ScenarioDefinition.TradeSeed::getTradedAt));
-        for (ScenarioDefinition.TradeSeed t : trades) {
-            orderService.execute(profileCode, t.getAccountNum(), t.getProdCode(), t.getSide(),
-                    t.getQuantity(), t.getPrice(), t.getTradedAt());
-        }
+        // OrderService.execute()는 건마다 @Transactional이라, 그냥 반복 호출하면 거래마다 별도
+        // 트랜잭션이 커밋된다 — 시나리오가 거래 수백 건이면 커밋 수백 번이 순차로 도는 셈이라
+        // 느리다. 여기서 하나의 트랜잭션으로 묶어서 재생 전체가 한 번에 커밋되게 한다(네트워크
+        // 호출이 섞인 가격 시딩은 위에서 이미 끝났으므로, 트랜잭션은 DB 작업만 감싼다).
+        transactionTemplate.executeWithoutResult(status -> {
+            for (ScenarioDefinition.TradeSeed t : trades) {
+                orderService.execute(profileCode, t.getAccountNum(), t.getProdCode(), t.getSide(),
+                        t.getQuantity(), t.getPrice(), t.getTradedAt());
+            }
+        });
     }
 }

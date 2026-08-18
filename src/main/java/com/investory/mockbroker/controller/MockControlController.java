@@ -127,7 +127,8 @@ public class MockControlController {
     /** 콘솔 화면용 통합 상태 조회 */
     @GetMapping("/state")
     public Map<String, Object> state(@RequestAttribute(PROFILE_CODE) String profileCode,
-                                     @RequestParam(value = "accountNum", required = false) String accountNum) {
+                                     @RequestParam(value = "accountNum", required = false) String accountNum,
+                                     @RequestParam(value = "txnLimit", defaultValue = "500") int txnLimit) {
         MockUser user = userMapper.findByProfileCode(profileCode);
         if (user == null) {
             throw MockApiException.notFound("등록되지 않은 연결입니다.");
@@ -177,7 +178,7 @@ public class MockControlController {
         }
 
         List<Map<String, Object>> transactions = new ArrayList<>();
-        for (MockTransaction t : transactionMapper.findRecent(profileCode, target.getAccountNum(), 15)) {
+        for (MockTransaction t : transactionMapper.findRecent(profileCode, target.getAccountNum(), txnLimit)) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("transNo", t.getTransNo());
             item.put("transDtime", t.getTransDtime());

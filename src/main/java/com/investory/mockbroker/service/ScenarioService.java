@@ -230,11 +230,11 @@ public class ScenarioService {
      * 준비하기 위함이다 — 계좌 개설일도 그 기간 시작일로 맞춘다.
      *
      * 하루마다: 휴장일(그 종목이 그날 거래된 기록이 없음)이면 건너뛰고, 아니면 매수턴·매도턴이
-     * 각각 뜰지 독립적으로 확률을 굴린다. 뜬 턴이 있으면 그날 저가~고가 사이에서 종목별 무작위
-     * "현재가"를 하나씩 뽑아두고, 매수턴은 그 가격으로 살 수 있는 종목 중 일부를 먼저 사고,
-     * 매도턴은 그 다음 보유 종목 중 일부를 판다. 예수금·보유수량은 이 메서드 안에서 직접
-     * 추적해서, 나중에 실제 유저에게 적용할 때 OrderService가 예수금/보유수량 부족으로
-     * 거부하는 일이 없게 한다.
+     * 각각 뜰지 독립적으로 확률을 굴린다. 뜬 턴이 있으면 그날 종가를 매수·매도 가격으로 그대로
+     * 쓴다(단순화를 위해 저가~고가 사이 무작위 대신 종가로 통일) — 매수턴은 그 가격으로 살 수
+     * 있는 종목 중 일부를 먼저 사고, 매도턴은 그 다음 보유 종목 중 일부를 판다. 예수금·보유수량은
+     * 이 메서드 안에서 직접 추적해서, 나중에 실제 유저에게 적용할 때 OrderService가 예수금/보유
+     * 수량 부족으로 거부하는 일이 없게 한다.
      */
     public synchronized ScenarioDefinition generateHistoricalTemplate(GenerateScenarioRequest req) {
         if (req.getTemplateId() == null || req.getTemplateId().isEmpty()) {
@@ -329,14 +329,14 @@ public class ScenarioService {
                 continue;
             }
 
-            // 매수·매도 둘 다 같은 "오늘의 가격"을 쓴다 — 그날 저가~고가 사이에서 종목별로 하나씩.
+            // 매수·매도 둘 다 같은 "오늘의 가격"을 쓴다 — 단순화를 위해 그날 종가로 통일한다.
             Map<String, BigDecimal> todayPrice = new LinkedHashMap<>();
             for (String prodCode : prodCodes) {
                 MarketQuoteService.HistoricalPrice h = historyByCode.get(prodCode).get(date);
                 if (h == null) {
                     continue; // 이 종목은 오늘 거래가 없었다(상장 전 등)
                 }
-                todayPrice.put(prodCode, randomPriceBetween(h.getLowPrice(), h.getHighPrice(), random));
+                todayPrice.put(prodCode, h.getClosePrice());
             }
 
             if (buyTurn) {
@@ -436,16 +436,6 @@ public class ScenarioService {
         trade.setQuantity(quantity);
         trade.setPrice(price);
         return trade;
-    }
-
-    /** [low, high] 구간에서 원 단위로 균등 무작위 가격을 하나 뽑는다. */
-    private BigDecimal randomPriceBetween(BigDecimal low, BigDecimal high, Random random) {
-        BigDecimal range = high.subtract(low);
-        if (range.compareTo(BigDecimal.ZERO) <= 0) {
-            return low;
-        }
-        BigDecimal offset = range.multiply(BigDecimal.valueOf(random.nextDouble())).setScale(0, RoundingMode.DOWN);
-        return low.add(offset);
     }
 
     /**

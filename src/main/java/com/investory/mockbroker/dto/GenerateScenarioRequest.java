@@ -4,9 +4,10 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * POST /mock/admin/templates/generate 요청. 종목별 실제 과거 시세(네이버 일별시세)를 가져와
- * 그 가격으로 매수 거래를 채운 시나리오 템플릿을 만든다 — 주로 본 서비스 분석 기능이 요구하는
- * "최소 N일치 거래이력" 테스트 데이터를 손으로 가격을 지어내지 않고 준비하기 위함이다.
+ * POST /mock/admin/templates/generate 요청. 종목별 실제 과거 시세(네이버 일별시세)를 하루씩
+ * 재생하며 매수·매도를 확률적으로 섞어 넣은 시나리오 템플릿을 만든다 — 주로 본 서비스 분석
+ * 기능이 요구하는 "최소 N일치 거래이력" 테스트 데이터를 손으로 가격을 지어내지 않고 준비하기
+ * 위함이다.
  */
 public class GenerateScenarioRequest {
     private String templateId;
@@ -22,8 +23,10 @@ public class GenerateScenarioRequest {
     private Integer days;
     /** 비우면 현재 시가총액 순위(코스피 상위 20 + 코스닥 상위 10)를 실시간 조회해 기본값으로 쓴다. */
     private List<String> prodCodes;
-    /** 종목 하나당 몇 번 매수할지. 기본 4회, 기간 전체에 고르게 분산시킨다. */
-    private Integer tradesPerProduct;
+    /** 영업일 하루마다 매수턴이 뜰 확률(0~1). 기본 0.35. */
+    private Double buyProbability;
+    /** 영업일 하루마다 매도턴이 뜰 확률(0~1). 기본 0.15. */
+    private Double sellProbability;
 
     public String getTemplateId() { return templateId; }
     public void setTemplateId(String templateId) { this.templateId = templateId; }
@@ -47,6 +50,8 @@ public class GenerateScenarioRequest {
     public void setDays(Integer days) { this.days = days; }
     public List<String> getProdCodes() { return prodCodes; }
     public void setProdCodes(List<String> prodCodes) { this.prodCodes = prodCodes; }
-    public Integer getTradesPerProduct() { return tradesPerProduct; }
-    public void setTradesPerProduct(Integer tradesPerProduct) { this.tradesPerProduct = tradesPerProduct; }
+    public Double getBuyProbability() { return buyProbability; }
+    public void setBuyProbability(Double buyProbability) { this.buyProbability = buyProbability; }
+    public Double getSellProbability() { return sellProbability; }
+    public void setSellProbability(Double sellProbability) { this.sellProbability = sellProbability; }
 }

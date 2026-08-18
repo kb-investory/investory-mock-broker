@@ -113,8 +113,10 @@ public class MarketQuoteService {
             Matcher matcher = HISTORY_ROW.matcher(response.getBody());
             while (matcher.find()) {
                 String date = matcher.group(1);
+                BigDecimal high = new BigDecimal(matcher.group(3));
+                BigDecimal low = new BigDecimal(matcher.group(4));
                 BigDecimal closePrice = new BigDecimal(matcher.group(5));
-                result.add(new HistoricalPrice(date, closePrice));
+                result.add(new HistoricalPrice(date, high, low, closePrice));
             }
             if (result.isEmpty()) {
                 log.warn("네이버 일별시세 조회 결과가 없습니다: {} ({} ~ {})", prodCode, from, to);
@@ -176,17 +178,23 @@ public class MarketQuoteService {
         return false;
     }
 
-    /** 종목의 특정일 종가. {date}는 yyyyMMdd. */
+    /** 종목의 특정일 고가·저가·종가. {date}는 yyyyMMdd. */
     public static class HistoricalPrice {
         private final String date;
+        private final BigDecimal highPrice;
+        private final BigDecimal lowPrice;
         private final BigDecimal closePrice;
 
-        public HistoricalPrice(String date, BigDecimal closePrice) {
+        public HistoricalPrice(String date, BigDecimal highPrice, BigDecimal lowPrice, BigDecimal closePrice) {
             this.date = date;
+            this.highPrice = highPrice;
+            this.lowPrice = lowPrice;
             this.closePrice = closePrice;
         }
 
         public String getDate() { return date; }
+        public BigDecimal getHighPrice() { return highPrice; }
+        public BigDecimal getLowPrice() { return lowPrice; }
         public BigDecimal getClosePrice() { return closePrice; }
     }
 

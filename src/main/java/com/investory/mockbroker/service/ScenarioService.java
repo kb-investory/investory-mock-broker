@@ -31,10 +31,14 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
@@ -67,6 +71,22 @@ public class ScenarioService {
     /** generateHistoricalTemplate에서 prodCodes를 안 넘겼을 때 기본으로 쓸 시가총액 상위 종목 수. */
     private static final int DEFAULT_KOSPI_TOP_N = 20;
     private static final int DEFAULT_KOSDAQ_TOP_N = 10;
+    /** 영업일 하루마다 매수·매도턴이 뜰 기본 확률. */
+    private static final double DEFAULT_BUY_PROBABILITY = 0.35;
+    private static final double DEFAULT_SELL_PROBABILITY = 0.15;
+    /** 매수·매도턴이 뜨면 그 안에서 몇 종목을 고를지(1~N 사이 무작위). */
+    private static final int MAX_BUY_PICKS_PER_TURN = 3;
+    private static final int MAX_SELL_PICKS_PER_TURN = 2;
+    /** 매수 한 건에 쓸 현금 비율(남은 예수금 대비). */
+    private static final double MIN_BUY_CASH_PORTION = 0.05;
+    private static final double MAX_BUY_CASH_PORTION = 0.20;
+    /** 매도 한 건에 팔 보유수량 비율. */
+    private static final double MIN_SELL_QTY_PORTION = 0.2;
+    private static final double MAX_SELL_QTY_PORTION = 1.0;
+    /** OrderService의 실제 수수료율(COMMISSION_RATE)·매도 제세금율(SELL_TAX_RATE)에 맞춘 근사값 —
+     *  생성 시점 시뮬레이션이 실제 체결 시 소진되는 금액을 과소추정해 예수금 부족이 나지 않게 한다. */
+    private static final BigDecimal BUY_COMMISSION_RATE = new BigDecimal("0.00015");
+    private static final BigDecimal SELL_FEE_RATE = new BigDecimal("0.00165");
 
     private final UserMapper userMapper;
     private final AccountMapper accountMapper;
@@ -198,9 +218,17 @@ public class ScenarioService {
     }
 
     /**
-     * 종목별 실제 과거 종가(네이버 일별시세)로 매수 거래를 채운 시나리오 템플릿을 만들어 DB에
-     * 저장한다. 본 서비스 분석 기능이 요구하는 "최소 N일치 거래이력" 테스트 데이터를 손으로
-     * 가격을 지어내지 않고 준비하기 위함이다 — 계좌 개설일도 그 기간 시작일로 맞춘다.
+     * 실제 과거 시세(네이버 일별시세)를 시나리오 시작일부터 하루씩 재생하며, 매수턴·매도턴을
+     * 확률적으로 섞어 거래를 채운 시나리오 템플릿을 만들어 DB에 저장한다. 본 서비스 분석
+     * 기능이 요구하는 "최소 N일치 거래이력" 테스트 데이터를 손으로 가격을 지어내지 않고
+     * 준비하기 위함이다 — 계좌 개설일도 그 기간 시작일로 맞춘다.
+     *
+     * 하루마다: 휴장일(그 종목이 그날 거래된 기록이 없음)이면 건너뛰고, 아니면 매수턴·매도턴이
+     * 각각 뜰지 독립적으로 확률을 굴린다. 뜬 턴이 있으면 그날 저가~고가 사이에서 종목별 무작위
+     * "현재가"를 하나씩 뽑아두고, 매수턴은 그 가격으로 살 수 있는 종목 중 일부를 먼저 사고,
+     * 매도턴은 그 다음 보유 종목 중 일부를 판다. 예수금·보유수량은 이 메서드 안에서 직접
+     * 추적해서, 나중에 실제 유저에게 적용할 때 OrderService가 예수금/보유수량 부족으로
+     * 거부하는 일이 없게 한다.
      */
     public synchronized ScenarioDefinition generateHistoricalTemplate(GenerateScenarioRequest req) {
         if (req.getTemplateId() == null || req.getTemplateId().isEmpty()) {
@@ -216,9 +244,13 @@ public class ScenarioService {
 
         BigDecimal initialCash = req.getInitialCash() != null ? req.getInitialCash() : new BigDecimal("10000000");
         int days = req.getDays() != null ? req.getDays() : 90;
-        int tradesPerProduct = req.getTradesPerProduct() != null ? req.getTradesPerProduct() : 4;
-        if (days < 1 || tradesPerProduct < 1) {
-            throw MockApiException.badRequest("days와 tradesPerProduct는 1 이상이어야 합니다.");
+        double buyProbability = req.getBuyProbability() != null ? req.getBuyProbability() : DEFAULT_BUY_PROBABILITY;
+        double sellProbability = req.getSellProbability() != null ? req.getSellProbability() : DEFAULT_SELL_PROBABILITY;
+        if (days < 1) {
+            throw MockApiException.badRequest("days는 1 이상이어야 합니다.");
+        }
+        if (buyProbability < 0 || buyProbability > 1 || sellProbability < 0 || sellProbability > 1) {
+            throw MockApiException.badRequest("buyProbability/sellProbability는 0~1 사이여야 합니다.");
         }
 
         // prodCodes를 안 넘기면 지금 시점 시가총액 순위(코스피 상위 20 + 코스닥 상위 10)를 실시간
@@ -245,14 +277,12 @@ public class ScenarioService {
 
         LocalDate to = LocalDate.now();
         LocalDate from = to.minusDays(days);
-        // 종목당 예산을 고르게 나누고 10% 여유를 둬서, 수수료 때문에 예수금 부족으로 재생이
-        // 실패하는 일이 없게 한다.
-        BigDecimal perTradeBudget = initialCash
-                .multiply(new BigDecimal("0.9"))
-                .divide(new BigDecimal(prodCodes.size() * tradesPerProduct), 0, RoundingMode.DOWN);
 
-        List<ScenarioDefinition.TradeSeed> trades = new ArrayList<>();
+        // 종목별 과거 일별 시세를 통째로 한 번씩만 가져와 날짜별로 인덱싱해둔다 — 아래 날짜 루프는
+        // 전부 메모리 안에서 돌고 추가 네트워크 호출은 없다.
         List<ScenarioDefinition.PriceSeed> prices = new ArrayList<>();
+        Map<String, Map<String, MarketQuoteService.HistoricalPrice>> historyByCode = new LinkedHashMap<>();
+        Set<String> tradingDates = new TreeSet<>();
 
         for (String prodCode : prodCodes) {
             List<MarketQuoteService.HistoricalPrice> history =
@@ -260,6 +290,12 @@ public class ScenarioService {
             if (history.isEmpty()) {
                 throw MockApiException.badRequest("과거 시세를 가져오지 못했습니다: " + prodCode);
             }
+            Map<String, MarketQuoteService.HistoricalPrice> byDate = new LinkedHashMap<>();
+            for (MarketQuoteService.HistoricalPrice h : history) {
+                byDate.put(h.getDate(), h);
+                tradingDates.add(h.getDate());
+            }
+            historyByCode.put(prodCode, byDate);
 
             String[] known = marketCapNames.get(prodCode);
             ScenarioDefinition.PriceSeed master = stockMasterService.findByCode(prodCode);
@@ -273,24 +309,86 @@ public class ScenarioService {
             }
             price.setCurrentPrice(history.get(history.size() - 1).getClosePrice());
             prices.add(price);
+        }
 
-            int step = Math.max(1, history.size() / tradesPerProduct);
-            int picked = 0;
-            for (int i = 0; i < history.size() && picked < tradesPerProduct; i += step) {
-                MarketQuoteService.HistoricalPrice h = history.get(i);
-                BigDecimal quantity = perTradeBudget.divide(h.getClosePrice(), 0, RoundingMode.DOWN);
-                if (quantity.compareTo(BigDecimal.ONE) < 0) {
-                    continue;
+        Random random = new Random();
+        BigDecimal cash = initialCash;
+        Map<String, BigDecimal> holdings = new LinkedHashMap<>();
+        List<ScenarioDefinition.TradeSeed> trades = new ArrayList<>();
+
+        for (String date : tradingDates) {
+            boolean buyTurn = random.nextDouble() < buyProbability;
+            boolean sellTurn = random.nextDouble() < sellProbability;
+            if (!buyTurn && !sellTurn) {
+                continue;
+            }
+
+            // 매수·매도 둘 다 같은 "오늘의 가격"을 쓴다 — 그날 저가~고가 사이에서 종목별로 하나씩.
+            Map<String, BigDecimal> todayPrice = new LinkedHashMap<>();
+            for (String prodCode : prodCodes) {
+                MarketQuoteService.HistoricalPrice h = historyByCode.get(prodCode).get(date);
+                if (h == null) {
+                    continue; // 이 종목은 오늘 거래가 없었다(상장 전 등)
                 }
-                ScenarioDefinition.TradeSeed trade = new ScenarioDefinition.TradeSeed();
-                trade.setAccountNum(req.getAccountNum());
-                trade.setTradedAt(h.getDate() + "093000");
-                trade.setSide("BUY");
-                trade.setProdCode(prodCode);
-                trade.setQuantity(quantity);
-                trade.setPrice(h.getClosePrice());
-                trades.add(trade);
-                picked++;
+                todayPrice.put(prodCode, randomPriceBetween(h.getLowPrice(), h.getHighPrice(), random));
+            }
+
+            if (buyTurn) {
+                List<String> affordable = new ArrayList<>();
+                for (Map.Entry<String, BigDecimal> e : todayPrice.entrySet()) {
+                    if (e.getValue().compareTo(cash) <= 0) {
+                        affordable.add(e.getKey());
+                    }
+                }
+                Collections.shuffle(affordable, random);
+                int buyCount = Math.min(affordable.size(), 1 + random.nextInt(MAX_BUY_PICKS_PER_TURN));
+                for (int i = 0; i < buyCount; i++) {
+                    String prodCode = affordable.get(i);
+                    BigDecimal price = todayPrice.get(prodCode);
+                    double portion = MIN_BUY_CASH_PORTION
+                            + random.nextDouble() * (MAX_BUY_CASH_PORTION - MIN_BUY_CASH_PORTION);
+                    BigDecimal qty = cash.multiply(BigDecimal.valueOf(portion)).divide(price, 0, RoundingMode.DOWN);
+                    if (qty.compareTo(BigDecimal.ONE) < 0) {
+                        continue;
+                    }
+                    BigDecimal cost = qty.multiply(price).multiply(BigDecimal.ONE.add(BUY_COMMISSION_RATE));
+                    if (cost.compareTo(cash) > 0) {
+                        continue;
+                    }
+                    trades.add(tradeSeed(req.getAccountNum(), date, randomTime(9, 11, random),
+                            "BUY", prodCode, qty, price));
+                    cash = cash.subtract(cost);
+                    holdings.merge(prodCode, qty, BigDecimal::add);
+                }
+            }
+
+            if (sellTurn) {
+                List<String> sellable = new ArrayList<>();
+                for (Map.Entry<String, BigDecimal> e : holdings.entrySet()) {
+                    if (e.getValue().compareTo(BigDecimal.ZERO) > 0 && todayPrice.containsKey(e.getKey())) {
+                        sellable.add(e.getKey());
+                    }
+                }
+                Collections.shuffle(sellable, random);
+                int sellCount = Math.min(sellable.size(), 1 + random.nextInt(MAX_SELL_PICKS_PER_TURN));
+                for (int i = 0; i < sellCount; i++) {
+                    String prodCode = sellable.get(i);
+                    BigDecimal held = holdings.get(prodCode);
+                    double portion = MIN_SELL_QTY_PORTION
+                            + random.nextDouble() * (MAX_SELL_QTY_PORTION - MIN_SELL_QTY_PORTION);
+                    BigDecimal qty = held.multiply(BigDecimal.valueOf(portion)).setScale(0, RoundingMode.DOWN);
+                    if (qty.compareTo(BigDecimal.ONE) < 0) {
+                        qty = BigDecimal.ONE;
+                    }
+                    if (qty.compareTo(held) > 0) {
+                        qty = held;
+                    }
+                    BigDecimal price = todayPrice.get(prodCode);
+                    trades.add(tradeSeed(req.getAccountNum(), date, randomTime(12, 15, random),
+                            "SELL", prodCode, qty, price));
+                    holdings.put(prodCode, held.subtract(qty));
+                    cash = cash.add(qty.multiply(price).multiply(BigDecimal.ONE.subtract(SELL_FEE_RATE)));
+                }
             }
         }
 
@@ -306,7 +404,7 @@ public class ScenarioService {
         def.setProfileName(req.getProfileName() != null && !req.getProfileName().isEmpty()
                 ? req.getProfileName() : req.getTemplateId());
         def.setDescription(req.getDescription() != null ? req.getDescription()
-                : days + "일치 실제 시세로 자동 생성된 시나리오");
+                : days + "일치 실제 시세를 하루씩 재생해 자동 생성된 시나리오");
         def.setOrgCode(req.getOrgCode());
         def.setOrgName(req.getOrgName());
         def.setPrices(prices);
@@ -314,9 +412,44 @@ public class ScenarioService {
         def.setTrades(trades);
 
         saveCustomTemplate(def);
-        log.info("과거 시세 기반 시나리오 생성 완료: {} - 종목 {}개, 거래 {}건 ({}일)",
-                req.getTemplateId(), prodCodes.size(), trades.size(), days);
+        long sellCount = trades.stream().filter(t -> "SELL".equals(t.getSide())).count();
+        log.info("과거 시세 기반 시나리오 생성 완료: {} - 종목 {}개, 거래 {}건(매수 {}/매도 {}), {}일",
+                req.getTemplateId(), prodCodes.size(), trades.size(), trades.size() - sellCount, sellCount, days);
         return def;
+    }
+
+    private ScenarioDefinition.TradeSeed tradeSeed(String accountNum, String date, String time, String side,
+                                                    String prodCode, BigDecimal quantity, BigDecimal price) {
+        ScenarioDefinition.TradeSeed trade = new ScenarioDefinition.TradeSeed();
+        trade.setAccountNum(accountNum);
+        trade.setTradedAt(date + time);
+        trade.setSide(side);
+        trade.setProdCode(prodCode);
+        trade.setQuantity(quantity);
+        trade.setPrice(price);
+        return trade;
+    }
+
+    /** [low, high] 구간에서 원 단위로 균등 무작위 가격을 하나 뽑는다. */
+    private BigDecimal randomPriceBetween(BigDecimal low, BigDecimal high, Random random) {
+        BigDecimal range = high.subtract(low);
+        if (range.compareTo(BigDecimal.ZERO) <= 0) {
+            return low;
+        }
+        BigDecimal offset = range.multiply(BigDecimal.valueOf(random.nextDouble())).setScale(0, RoundingMode.DOWN);
+        return low.add(offset);
+    }
+
+    /**
+     * {fromHour}~{toHour} 사이 무작위 시각을 "HHmmss"로 뽑는다. 매수는 9~11시, 매도는 12~15시
+     * 대역을 써서 같은 날 매수가 항상 매도보다 먼저 재생되게 한다(시나리오 요구사항: 매수턴 →
+     * 매도턴 순서).
+     */
+    private String randomTime(int fromHour, int toHour, Random random) {
+        int hour = fromHour + random.nextInt(Math.max(1, toHour - fromHour));
+        int minute = random.nextInt(60);
+        int second = random.nextInt(60);
+        return String.format("%02d%02d%02d", hour, minute, second);
     }
 
     private ScenarioDefinition parseDefinition(String json) {

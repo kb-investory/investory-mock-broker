@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.investory.mockbroker.mapper.SecurityMapper">
+
+  <!-- KONEX는 뺀다 — 네이버 공개 시세 API가 코스피/코스닥만 안정적으로 지원한다. -->
+  <select id="findAllActive" resultType="Security">
+    SELECT security_code, security_name, market_type
+      FROM securities
+     WHERE is_active = 1
+       AND market_type IN ('KOSPI', 'KOSDAQ')
+     ORDER BY security_code
+  </select>
+</mapper>

@@ -7,18 +7,19 @@ import com.investory.mockbroker.dto.AdminCreateUserRequest;
 import com.investory.mockbroker.dto.ApplyScenarioRequest;
 import com.investory.mockbroker.dto.GenerateScenarioRequest;
 import com.investory.mockbroker.dto.MockApiException;
+import com.investory.mockbroker.domain.Security;
 import com.investory.mockbroker.mapper.AccountMapper;
 import com.investory.mockbroker.mapper.ConnectionMapper;
 import com.investory.mockbroker.mapper.HoldingMapper;
 import com.investory.mockbroker.mapper.OrgMapper;
 import com.investory.mockbroker.mapper.PriceMapper;
+import com.investory.mockbroker.mapper.SecurityMapper;
 import com.investory.mockbroker.mapper.TransactionMapper;
 import com.investory.mockbroker.mapper.UserMapper;
 import com.investory.mockbroker.seed.ScenarioDefinition;
 import com.investory.mockbroker.service.AccessTokenStore;
 import com.investory.mockbroker.service.AdminTokenStore;
 import com.investory.mockbroker.service.ScenarioService;
-import com.investory.mockbroker.service.MarketQuoteService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -63,7 +64,7 @@ public class AdminController {
     private final TransactionMapper transactionMapper;
     private final ScenarioService scenarioService;
     private final OrgMapper orgMapper;
-    private final MarketQuoteService marketQuoteService;
+    private final SecurityMapper securityMapper;
 
     @Autowired
     public AdminController(AdminTokenStore tokenStore, AccessTokenStore accessTokenStore,
@@ -71,7 +72,7 @@ public class AdminController {
                            AccountMapper accountMapper, HoldingMapper holdingMapper,
                            PriceMapper priceMapper, TransactionMapper transactionMapper,
                            ScenarioService scenarioService, OrgMapper orgMapper,
-                           MarketQuoteService marketQuoteService) {
+                           SecurityMapper securityMapper) {
         this.tokenStore = tokenStore;
         this.accessTokenStore = accessTokenStore;
         this.connectionMapper = connectionMapper;
@@ -82,7 +83,7 @@ public class AdminController {
         this.transactionMapper = transactionMapper;
         this.scenarioService = scenarioService;
         this.orgMapper = orgMapper;
-        this.marketQuoteService = marketQuoteService;
+        this.securityMapper = securityMapper;
     }
 
     @PostMapping("/login")
@@ -148,27 +149,19 @@ public class AdminController {
     }
 
     /**
-     * 시가총액 상위 종목 코드·이름 (과거 시세 기반 시나리오 생성 카드의 종목 선택창용). 코스피
-     * 전 종목이 아니라 generateHistoricalTemplate이 기본 바스켓으로 쓰는 것과 같은 범위(코스피
-     * 상위 20 + 코스닥 상위 10)로 좁혀서, 고를 수 있는 종목이 실제로 쓰이는 후보와 일치하게 한다.
+     * DB securities 테이블의 활성 종목 코드·이름 (과거 시세 기반 시나리오 생성 카드의 종목
+     * 선택창용). 메인 서비스와 통일해서 쓰는 실제 종목 마스터라 시가총액 순위처럼 매번 외부
+     * 조회할 필요가 없다 — KONEX는 뺀다(네이버 공개 시세 API가 코스피/코스닥만 지원).
      */
     @GetMapping("/products")
     public List<Map<String, Object>> products(
             @RequestHeader(value = "x-admin-token", required = false) String adminToken) {
         requireAdmin(adminToken);
         List<Map<String, Object>> result = new ArrayList<>();
-        for (MarketQuoteService.MarketCapEntry e
-                : marketQuoteService.fetchMarketCapTop("0", ScenarioService.DEFAULT_KOSPI_TOP_N)) {
+        for (Security s : securityMapper.findAllActive()) {
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("prodCode", e.getCode());
-            item.put("prodName", e.getName());
-            result.add(item);
-        }
-        for (MarketQuoteService.MarketCapEntry e
-                : marketQuoteService.fetchMarketCapTop("1", ScenarioService.DEFAULT_KOSDAQ_TOP_N)) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("prodCode", e.getCode());
-            item.put("prodName", e.getName());
+            item.put("prodCode", s.getSecurityCode());
+            item.put("prodName", s.getSecurityName());
             result.add(item);
         }
         return result;

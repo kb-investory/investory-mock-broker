@@ -38,21 +38,12 @@ public class MarketQuoteService {
     private static final Logger log = LoggerFactory.getLogger(MarketQuoteService.class);
     private static final String QUOTE_URL = "https://polling.finance.naver.com/api/realtime/domestic/stock/";
     private static final String HISTORY_URL = "https://api.finance.naver.com/siseJson.naver";
-    private static final String MARKET_CAP_URL = "https://finance.naver.com/sise/sise_market_sum.naver";
     private static final int TIMEOUT_MS = 2000;
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
     /** 네이버 일별시세 응답이 완전한 JSON이 아니라(헤더 행만 홑따옴표) 데이터 행만 정규식으로 뽑아낸다.
      *  날짜와 종가만 쓰므로 시가·고가·저가는 건너뛴다. */
     private static final Pattern HISTORY_ROW = Pattern.compile(
             "\\[\"(\\d{8})\",\\s*[\\d.]+,\\s*[\\d.]+,\\s*[\\d.]+,\\s*([\\d.]+),");
-    private static final Pattern MARKET_CAP_ROW = Pattern.compile(
-            "code=(\\d{6})\"[^>]*class=\"tltle\">([^<]+)</a>");
-    /** 시가총액 순위 페이지에 같이 뜨는 ETF/ETN 상품명 접두어 — 완전한 목록은 아니고, 데모용
-     *  테스트 데이터 생성에서 일반 종목만 고르기 위한 최선 노력(best-effort) 필터다. */
-    private static final String[] FUND_NAME_PREFIXES = {
-            "KODEX", "TIGER", "KBSTAR", "ACE", "SOL", "HANARO", "ARIRANG", "KOSEF",
-            "PLUS", "TIMEFOLIO", "WOORI", "히어로즈", "파워", "마이다스",
-    };
 
     @Value("${MOCKBROKER_QUOTE_ENABLED:true}")
     private boolean quoteEnabled;
@@ -127,56 +118,6 @@ public class MarketQuoteService {
         }
     }
 
-    /**
-     * 네이버 시가총액 순위 1페이지에서 상위 {limit}개 종목의 코드·이름을 가져온다(ETF/우선주는
-     * 최선 노력으로 걸러낸다). 순위는 조회 시점마다 달라지므로 결과를 저장해두지 않는다 — 매번
-     * 새로 조회한다. 실패하거나 조회가 꺼져 있으면 빈 목록.
-     *
-     * @param sosok 코스피 "0", 코스닥 "1"
-     */
-    public List<MarketCapEntry> fetchMarketCapTop(String sosok, int limit) {
-        if (!quoteEnabled) {
-            return Collections.emptyList();
-        }
-        try {
-            String url = MARKET_CAP_URL + "?sosok=" + sosok + "&page=1";
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0");
-            ResponseEntity<String> response = restTemplate.exchange(
-                    url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
-
-            List<MarketCapEntry> result = new ArrayList<>();
-            Matcher matcher = MARKET_CAP_ROW.matcher(response.getBody());
-            while (matcher.find() && result.size() < limit) {
-                String code = matcher.group(1);
-                String name = matcher.group(2).trim();
-                if (isFundOrPreferred(name)) {
-                    continue;
-                }
-                result.add(new MarketCapEntry(code, name));
-            }
-            if (result.isEmpty()) {
-                log.warn("네이버 시가총액 순위 조회 결과가 없습니다 (sosok={})", sosok);
-            }
-            return result;
-        } catch (Exception e) {
-            log.warn("네이버 시가총액 순위 조회에 실패했습니다 (sosok={}): {}", sosok, e.toString());
-            return Collections.emptyList();
-        }
-    }
-
-    private boolean isFundOrPreferred(String name) {
-        if (name.endsWith("우") || name.matches(".*우[A-Z]$")) {
-            return true;
-        }
-        for (String prefix : FUND_NAME_PREFIXES) {
-            if (name.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** 종목의 특정일 종가. {date}는 yyyyMMdd. */
     public static class HistoricalPrice {
         private final String date;
@@ -189,19 +130,5 @@ public class MarketQuoteService {
 
         public String getDate() { return date; }
         public BigDecimal getClosePrice() { return closePrice; }
-    }
-
-    /** 시가총액 순위 조회 결과 한 종목. */
-    public static class MarketCapEntry {
-        private final String code;
-        private final String name;
-
-        public MarketCapEntry(String code, String name) {
-            this.code = code;
-            this.name = name;
-        }
-
-        public String getCode() { return code; }
-        public String getName() { return name; }
     }
 }

@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -38,6 +39,8 @@ public class MyDataInvestController {
 
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
+    /** 국내 증시 하나만 다루는 도메인이라 조회시각·기준일은 항상 KST로 찍는다. */
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final AccountMapper accountMapper;
     private final HoldingMapper holdingMapper;
@@ -101,7 +104,7 @@ public class MyDataInvestController {
 
         Map<String, Object> body = success();
         body.put("search_timestamp", now());
-        body.put("base_date", LocalDate.now().format(DATE));
+        body.put("base_date", LocalDate.now(KST).format(DATE));
         body.put("basic_cnt", basicList.size());
         body.put("basic_list", basicList);
         return body;
@@ -189,7 +192,7 @@ public class MyDataInvestController {
 
         Map<String, Object> body = success();
         body.put("search_timestamp", now());
-        body.put("base_date", LocalDate.now().format(DATE));
+        body.put("base_date", LocalDate.now(KST).format(DATE));
         body.put("prod_cnt", list.size());
         body.put("prod_list", list);
         return body;
@@ -215,7 +218,7 @@ public class MyDataInvestController {
     }
 
     private String now() {
-        return LocalDateTime.now().format(TIMESTAMP);
+        return LocalDateTime.now(KST).format(TIMESTAMP);
     }
 
     private int parseNextPage(String nextPage) {

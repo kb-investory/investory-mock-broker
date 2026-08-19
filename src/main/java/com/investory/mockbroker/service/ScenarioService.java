@@ -33,6 +33,7 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,6 +58,8 @@ public class ScenarioService {
 
     private static final Logger log = LoggerFactory.getLogger(ScenarioService.class);
     private static final String SCENARIO_PATTERN = "classpath*:scenarios/*.json";
+    /** 국내 증시 하나만 다루는 도메인이라 "오늘" 기준은 항상 KST로 잡는다. */
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     /** 회원가입으로 만들어지는 유저에게 붙는 기본 증권사(가상)와 계좌. 시드 JSON이 없어도 바로 거래를 시작할 수 있게 한다. */
     private static final String SIGNUP_ORG_CODE = "S9990099A";
@@ -280,7 +283,7 @@ public class ScenarioService {
             }
         }
 
-        LocalDate to = LocalDate.now();
+        LocalDate to = LocalDate.now(KST);
         LocalDate from = to.minusDays(days);
 
         // 종목별 과거 일별 시세를 통째로 한 번씩만 가져와 날짜별로 인덱싱해둔다 — 아래 날짜 루프는
@@ -605,7 +608,7 @@ public class ScenarioService {
         account.setAccountNum(SIGNUP_ACCOUNT_NUM);
         account.setAccountName("종합위탁계좌");
         account.setAccountType("101");
-        account.setIssueDate(LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE));
+        account.setIssueDate(LocalDate.now(KST).format(DateTimeFormatter.BASIC_ISO_DATE));
         account.setCashBalance(SIGNUP_INITIAL_CASH);
         accountMapper.insert(account);
 

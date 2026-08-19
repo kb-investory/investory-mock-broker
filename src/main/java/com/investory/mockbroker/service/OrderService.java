@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 /**
@@ -43,6 +44,9 @@ public class OrderService {
     public static final String TRANS_TYPE_SELL = "102";
 
     private static final DateTimeFormatter DTIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    /** 국내 증시 하나만 다루는 도메인이라 체결시각은 항상 KST로 찍는다 — 서버가 어떤 타임존에서
+     *  뜨든 흔들리지 않게 컨테이너 설정이 아니라 여기서 명시한다. */
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final AccountMapper accountMapper;
     private final HoldingMapper holdingMapper;
@@ -179,7 +183,7 @@ public class OrderService {
         newCash = newCash.setScale(3, RoundingMode.HALF_UP);
         accountMapper.updateCashBalance(profileCode, accountNum, newCash);
 
-        String transDtime = liveOrder ? LocalDateTime.now().format(DTIME) : tradedAt;
+        String transDtime = liveOrder ? LocalDateTime.now(KST).format(DTIME) : tradedAt;
         String transNo = nextTransNo(profileCode, accountNum, transDtime.substring(0, 8));
 
         MockTransaction txn = new MockTransaction();

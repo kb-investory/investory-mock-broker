@@ -5,6 +5,7 @@ import com.investory.mockbroker.domain.MockAccount;
 import com.investory.mockbroker.domain.MockOrg;
 import com.investory.mockbroker.domain.MockPrice;
 import com.investory.mockbroker.domain.MockUser;
+import com.investory.mockbroker.domain.Security;
 import com.investory.mockbroker.dto.GenerateScenarioRequest;
 import com.investory.mockbroker.dto.MockApiException;
 import com.investory.mockbroker.domain.MockScenarioTemplate;
@@ -12,6 +13,7 @@ import com.investory.mockbroker.mapper.AccountMapper;
 import com.investory.mockbroker.mapper.HoldingMapper;
 import com.investory.mockbroker.mapper.OrgMapper;
 import com.investory.mockbroker.mapper.PriceMapper;
+import com.investory.mockbroker.mapper.SecurityMapper;
 import com.investory.mockbroker.mapper.TemplateMapper;
 import com.investory.mockbroker.mapper.TransactionMapper;
 import com.investory.mockbroker.mapper.UserMapper;
@@ -70,9 +72,6 @@ public class ScenarioService {
         {"042700", "한미반도체", "KOSPI", "96500"},
     };
 
-    /** generateHistoricalTemplate에서 prodCodes를 안 넘겼을 때 기본으로 쓸 시가총액 상위 종목 수. */
-    private static final int DEFAULT_KOSPI_TOP_N = 20;
-    private static final int DEFAULT_KOSDAQ_TOP_N = 10;
     /** 영업일 하루마다 매수·매도턴이 뜰 기본 확률. */
     private static final double DEFAULT_BUY_PROBABILITY = 0.35;
     private static final double DEFAULT_SELL_PROBABILITY = 0.15;
@@ -103,6 +102,7 @@ public class ScenarioService {
     private final ClientService clientService;
     private final OrgMapper orgMapper;
     private final StockMasterService stockMasterService;
+    private final SecurityMapper securityMapper;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -115,7 +115,8 @@ public class ScenarioService {
                            TransactionMapper transactionMapper, TemplateMapper templateMapper,
                            OrderService orderService, MarketQuoteService marketQuoteService,
                            ClientService clientService, OrgMapper orgMapper,
-                           StockMasterService stockMasterService, PlatformTransactionManager transactionManager) {
+                           StockMasterService stockMasterService, SecurityMapper securityMapper,
+                           PlatformTransactionManager transactionManager) {
         this.userMapper = userMapper;
         this.accountMapper = accountMapper;
         this.priceMapper = priceMapper;
@@ -126,6 +127,7 @@ public class ScenarioService {
         this.marketQuoteService = marketQuoteService;
         this.clientService = clientService;
         this.orgMapper = orgMapper;
+        this.securityMapper = securityMapper;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.stockMasterService = stockMasterService;
     }
@@ -259,25 +261,22 @@ public class ScenarioService {
             throw MockApiException.badRequest("buyProbability/sellProbability는 0~1 사이여야 합니다.");
         }
 
-        // prodCodes를 안 넘기면 지금 시점 시가총액 순위(코스피 상위 20 + 코스닥 상위 10)를 실시간
-        // 조회해 기본 바스켓으로 쓴다 — 순위를 코드에 박아두면 바뀔 때마다 재배포해야 하므로.
+        // prodCodes를 안 넘기면 DB securities 테이블의 활성 종목(코스피·코스닥) 전체를 기본
+        // 바스켓으로 쓴다 — 메인 서비스와 통일해서 쓰는 실제 종목 마스터라 이 목업 서버가 별도로
+        // 순위를 매기거나 목록을 들고 있을 필요가 없다.
         List<String> prodCodes;
-        Map<String, String[]> marketCapNames = new LinkedHashMap<>();
+        Map<String, String[]> securityNames = new LinkedHashMap<>();
         if (req.getProdCodes() != null && !req.getProdCodes().isEmpty()) {
             prodCodes = req.getProdCodes();
         } else {
             prodCodes = new ArrayList<>();
-            for (MarketQuoteService.MarketCapEntry e : marketQuoteService.fetchMarketCapTop("0", DEFAULT_KOSPI_TOP_N)) {
-                prodCodes.add(e.getCode());
-                marketCapNames.put(e.getCode(), new String[]{e.getName(), "KOSPI"});
-            }
-            for (MarketQuoteService.MarketCapEntry e : marketQuoteService.fetchMarketCapTop("1", DEFAULT_KOSDAQ_TOP_N)) {
-                prodCodes.add(e.getCode());
-                marketCapNames.put(e.getCode(), new String[]{e.getName(), "KOSDAQ"});
+            for (Security s : securityMapper.findAllActive()) {
+                prodCodes.add(s.getSecurityCode());
+                securityNames.put(s.getSecurityCode(), new String[]{s.getSecurityName(), s.getMarketType()});
             }
             if (prodCodes.isEmpty()) {
                 throw MockApiException.badRequest(
-                        "prodCodes가 없고 시가총액 순위 조회도 실패했습니다. prodCodes를 직접 지정하세요.");
+                        "prodCodes가 없고 securities 테이블에 활성 종목도 없습니다. prodCodes를 직접 지정하세요.");
             }
         }
 
@@ -285,17 +284,21 @@ public class ScenarioService {
         LocalDate from = to.minusDays(days);
 
         // 종목별 과거 일별 시세를 통째로 한 번씩만 가져와 날짜별로 인덱싱해둔다 — 아래 날짜 루프는
-        // 전부 메모리 안에서 돌고 추가 네트워크 호출은 없다.
+        // 전부 메모리 안에서 돌고 추가 네트워크 호출은 없다. 바스켓이 클 수 있어(전체 활성 종목),
+        // 한두 종목의 시세 조회가 실패해도 전체를 막지 않고 그 종목만 건너뛴다.
         List<ScenarioDefinition.PriceSeed> prices = new ArrayList<>();
         Map<String, Map<String, MarketQuoteService.HistoricalPrice>> historyByCode = new LinkedHashMap<>();
         Set<String> tradingDates = new TreeSet<>();
+        List<String> resolvedProdCodes = new ArrayList<>();
 
         for (String prodCode : prodCodes) {
             List<MarketQuoteService.HistoricalPrice> history =
                     marketQuoteService.fetchHistoricalPrices(prodCode, from, to);
             if (history.isEmpty()) {
-                throw MockApiException.badRequest("과거 시세를 가져오지 못했습니다: " + prodCode);
+                log.warn("과거 시세를 가져오지 못해 건너뜁니다: {}", prodCode);
+                continue;
             }
+            resolvedProdCodes.add(prodCode);
             Map<String, MarketQuoteService.HistoricalPrice> byDate = new LinkedHashMap<>();
             for (MarketQuoteService.HistoricalPrice h : history) {
                 byDate.put(h.getDate(), h);
@@ -303,7 +306,7 @@ public class ScenarioService {
             }
             historyByCode.put(prodCode, byDate);
 
-            String[] known = marketCapNames.get(prodCode);
+            String[] known = securityNames.get(prodCode);
             ScenarioDefinition.PriceSeed master = stockMasterService.findByCode(prodCode);
             ScenarioDefinition.PriceSeed price = new ScenarioDefinition.PriceSeed();
             price.setProdCode(prodCode);
@@ -316,6 +319,10 @@ public class ScenarioService {
             price.setCurrentPrice(history.get(history.size() - 1).getClosePrice());
             prices.add(price);
         }
+        if (prices.isEmpty()) {
+            throw MockApiException.badRequest("지정한 종목 전부 과거 시세를 가져오지 못했습니다.");
+        }
+        prodCodes = resolvedProdCodes;
 
         Random random = new Random();
         BigDecimal cash = initialCash;

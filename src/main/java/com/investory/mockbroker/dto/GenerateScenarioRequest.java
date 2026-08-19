@@ -21,7 +21,7 @@ public class GenerateScenarioRequest {
     private BigDecimal initialCash;
     /** 오늘로부터 며칠 전까지 거슬러 올라가 거래를 채울지. 기본 90일. */
     private Integer days;
-    /** 비우면 현재 시가총액 순위(코스피 상위 20 + 코스닥 상위 10)를 실시간 조회해 기본값으로 쓴다. */
+    /** 비우면 DB securities 테이블의 활성 종목(코스피·코스닥) 전체를 기본값으로 쓴다. */
     private List<String> prodCodes;
     /** 영업일 하루마다 매수턴이 뜰 확률(0~1). 기본 0.35. */
     private Double buyProbability;

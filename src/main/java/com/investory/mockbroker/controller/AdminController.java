@@ -18,7 +18,7 @@ import com.investory.mockbroker.seed.ScenarioDefinition;
 import com.investory.mockbroker.service.AccessTokenStore;
 import com.investory.mockbroker.service.AdminTokenStore;
 import com.investory.mockbroker.service.ScenarioService;
-import com.investory.mockbroker.service.StockMasterService;
+import com.investory.mockbroker.service.MarketQuoteService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -63,7 +63,7 @@ public class AdminController {
     private final TransactionMapper transactionMapper;
     private final ScenarioService scenarioService;
     private final OrgMapper orgMapper;
-    private final StockMasterService stockMasterService;
+    private final MarketQuoteService marketQuoteService;
 
     @Autowired
     public AdminController(AdminTokenStore tokenStore, AccessTokenStore accessTokenStore,
@@ -71,7 +71,7 @@ public class AdminController {
                            AccountMapper accountMapper, HoldingMapper holdingMapper,
                            PriceMapper priceMapper, TransactionMapper transactionMapper,
                            ScenarioService scenarioService, OrgMapper orgMapper,
-                           StockMasterService stockMasterService) {
+                           MarketQuoteService marketQuoteService) {
         this.tokenStore = tokenStore;
         this.accessTokenStore = accessTokenStore;
         this.connectionMapper = connectionMapper;
@@ -82,7 +82,7 @@ public class AdminController {
         this.transactionMapper = transactionMapper;
         this.scenarioService = scenarioService;
         this.orgMapper = orgMapper;
-        this.stockMasterService = stockMasterService;
+        this.marketQuoteService = marketQuoteService;
     }
 
     @PostMapping("/login")
@@ -147,16 +147,28 @@ public class AdminController {
         return body;
     }
 
-    /** 코스피 전 종목 코드·이름 (과거 시세 기반 시나리오 생성 카드의 종목 선택창용, 네트워크 호출 없음). */
+    /**
+     * 시가총액 상위 종목 코드·이름 (과거 시세 기반 시나리오 생성 카드의 종목 선택창용). 코스피
+     * 전 종목이 아니라 generateHistoricalTemplate이 기본 바스켓으로 쓰는 것과 같은 범위(코스피
+     * 상위 20 + 코스닥 상위 10)로 좁혀서, 고를 수 있는 종목이 실제로 쓰이는 후보와 일치하게 한다.
+     */
     @GetMapping("/products")
     public List<Map<String, Object>> products(
             @RequestHeader(value = "x-admin-token", required = false) String adminToken) {
         requireAdmin(adminToken);
         List<Map<String, Object>> result = new ArrayList<>();
-        for (ScenarioDefinition.PriceSeed p : stockMasterService.listAll()) {
+        for (MarketQuoteService.MarketCapEntry e
+                : marketQuoteService.fetchMarketCapTop("0", ScenarioService.DEFAULT_KOSPI_TOP_N)) {
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("prodCode", p.getProdCode());
-            item.put("prodName", p.getProdName());
+            item.put("prodCode", e.getCode());
+            item.put("prodName", e.getName());
+            result.add(item);
+        }
+        for (MarketQuoteService.MarketCapEntry e
+                : marketQuoteService.fetchMarketCapTop("1", ScenarioService.DEFAULT_KOSDAQ_TOP_N)) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("prodCode", e.getCode());
+            item.put("prodName", e.getName());
             result.add(item);
         }
         return result;

@@ -70,9 +70,10 @@ public class ScenarioService {
         {"042700", "한미반도체", "KOSPI", "96500"},
     };
 
-    /** generateHistoricalTemplate에서 prodCodes를 안 넘겼을 때 기본으로 쓸 시가총액 상위 종목 수. */
-    private static final int DEFAULT_KOSPI_TOP_N = 20;
-    private static final int DEFAULT_KOSDAQ_TOP_N = 10;
+    /** generateHistoricalTemplate에서 prodCodes를 안 넘겼을 때 기본으로 쓸 시가총액 상위 종목 수.
+     *  AdminController의 종목 선택창(/mock/admin/products)도 이 값으로 후보를 좁힌다. */
+    public static final int DEFAULT_KOSPI_TOP_N = 20;
+    public static final int DEFAULT_KOSDAQ_TOP_N = 10;
     /** 영업일 하루마다 매수·매도턴이 뜰 기본 확률. */
     private static final double DEFAULT_BUY_PROBABILITY = 0.35;
     private static final double DEFAULT_SELL_PROBABILITY = 0.15;

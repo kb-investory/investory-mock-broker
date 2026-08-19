@@ -245,16 +245,18 @@ client_id/secret이나 accessToken과는 별개의 세 번째 인증 경로. 특
 
 `templateId`가 없으면 `40001`, 번들 파일 템플릿과 겹치면 `40001`.
 
-### `GET /mock/admin/products` — 코스피 전 종목 코드·이름 목록
+### `GET /mock/admin/products` — 시가총액 상위 종목 코드·이름 목록
 
-인증: `x-admin-token` 헤더. 네트워크 호출 없이 즉시 응답한다(`GET /mock/products`와 같은 데이터,
-콘솔용 인증 경로라는 점만 다르다). "과거 데이터 기반 시나리오 생성" 카드의 종목 선택창이 쓴다.
+인증: `x-admin-token` 헤더. 코스피 전 종목이 아니라 `POST /mock/admin/templates/generate`가
+`prodCodes` 없이 쓰는 것과 같은 기본 바스켓(코스피 상위 20 + 코스닥 상위 10)을 실시간 조회해
+돌려준다 — "과거 데이터 기반 시나리오 생성" 카드의 종목 선택창에서, 실제로 기본값으로 쓰이는
+후보 안에서만 고를 수 있게 하기 위함이다.
 
 **Response** `200`
 ```json
 [ { "prodCode": "005930", "prodName": "삼성전자" }, ... ]
 ```
-(약 944건, 우선주 포함)
+(최대 30건)
 
 ### `POST /mock/admin/templates/generate` — 과거 시세 기반 템플릿 생성
 
